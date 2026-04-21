@@ -83,7 +83,7 @@ with st.sidebar:
     positions      = position_groups[position_group]
 
     st.markdown('<span class="sb-section-label">Score type</span>', unsafe_allow_html=True)
-    score_mode = st.radio("sm", ["Model (raw)","Adjusted (recommended)"], label_visibility="collapsed")
+    score_mode = st.radio("sm", ["Adjusted (recommended)","Model (raw)"], label_visibility="collapsed")
 
     st.markdown('<span class="sb-section-label">Filters</span>', unsafe_allow_html=True)
     countries     = ["All"] + sorted(data["Birth country"].dropna().unique())

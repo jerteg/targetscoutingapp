@@ -548,13 +548,6 @@ with col_right:
                 compact=True,
             )
         st.pyplot(fig_cmp, use_container_width=True)
-        st.download_button(
-            "Download radar (PNG)",
-            data=export_full(fig_cmp),
-            file_name=f"{p1_name.replace(' ','_')}_vs_{p2_name.replace(' ','_')}_{p1_season[:4]}vs{p2_season[:4]}_radar.png",
-            mime="image/png",
-            key="dl_cmp_radar",
-        )
     except Exception as e:
         st.error(f"Radar error: {e}")
 
