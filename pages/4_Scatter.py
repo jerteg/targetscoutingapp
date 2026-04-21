@@ -189,6 +189,18 @@ for idx, row in plot_df.iterrows():
         marker=dict(size=ms, color=color, opacity=op, line=dict(width=lw,color=lc), symbol=sym),
         hovertemplate="<br>".join(hover)+"<extra></extra>", showlegend=False))
 
+# Always label the highlighted player
+if is_hl:
+    hl_row = plot_df[plot_df["Player"] == hl]
+    if not hl_row.empty:
+        r = hl_row.iloc[0]
+        fig.add_annotation(
+            x=r[x_stat], y=r[y_stat], text=hl,
+            showarrow=True, arrowhead=2, arrowcolor="#c9a84c",
+            arrowwidth=1.5, ax=20, ay=-30,
+            font=dict(size=11, color="#111827", family="DM Sans"),
+            bgcolor="#f0ebe2", bordercolor="#c9a84c", borderpad=4)
+
 if show_topn:
     for _, row in plot_df.nlargest(top_n,"_pct").iterrows():
         if is_hl and row["Player"]==hl: continue

@@ -252,16 +252,24 @@ st.markdown(f"""
 # ── Open in Dashboard row ──────────────────────────────────────────────────────
 display_df = df.head(max_rows)
 if not display_df.empty:
-    player_options = [f"{r['Player']} — {r['Team within selected timeframe']}" for _,r in display_df.iterrows()]
-    col_sel, col_btn = st.columns([4,1])
+    # Quick-open: type to search then open
+    player_options = [f"{r['Player']} ({r['Team within selected timeframe']})"
+                      for _, r in display_df.iterrows()]
+    col_sel, col_btn = st.columns([4, 1])
     with col_sel:
-        selected_str = st.selectbox("Select a player",["— select a player —"]+player_options,label_visibility="collapsed")
+        selected_str = st.selectbox(
+            "Select a player",
+            ["— select a player —"] + player_options,
+            label_visibility="collapsed",
+        )
     with col_btn:
-        if st.button("Open Dashboard →", key="db_open"):
+        if st.button("Open Dashboard →", key="db_open", use_container_width=True):
             if selected_str != "— select a player —":
-                pname = selected_str.split(" — ")[0]; tname = selected_str.split(" — ")[1]
-                match = display_df[(display_df["Player"]==pname)&(display_df["Team within selected timeframe"]==tname)]
+                # parse name from "Name (Team)" format
+                pname = selected_str.rsplit(" (", 1)[0]
+                match = display_df[display_df["Player"] == pname]
                 if not match.empty:
+                    tname = match.iloc[0]["Team within selected timeframe"]
                     st.session_state.dashboard_player         = pname
                     st.session_state.dashboard_team           = tname
                     st.session_state.dashboard_position_group = match.iloc[0]["_pg"]
@@ -326,7 +334,6 @@ for i, (_, row) in enumerate(display_df.iterrows()):
       {avail_cell}
       {cat_cells}
       <td><span class="score-ov" style="background:{ov_c};">{ov_val}</span></td>
-      <td><span class="row-action">Open →</span></td>
     </tr>"""
 
 table_html += "</tbody></table></div>"
