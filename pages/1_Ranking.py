@@ -35,7 +35,7 @@ from shared.roles_v2 import (
 from shared.scoring import compute_role_ranking
 from shared.similarity import adjusted_similarity, tier_badge_color, LEAGUE_TIERS
 from shared.archetypes import (
-    train_or_load_models, get_player_archetype, ARCHETYPE_COLORS,
+    load_or_train_models, get_player_archetype, ARCHETYPE_COLORS,
 )
 
 
@@ -248,7 +248,7 @@ if mode == "Find by role":
         unsafe_allow_html=True,
     )
 else:
-    arch_models = train_or_load_models(data)
+    arch_models = load_or_train_models(data)
     primary, secondary, p_dist, s_dist = get_player_archetype(
         ref_row, arch_models, ref_pg
     )
