@@ -19,7 +19,7 @@ from shared.templates import (
     ALL_RADAR_STATS,
 )
 from shared.templates_extra import (
-    DASHBOARD_BARS_PER_POSITION, DASHBOARD_SCATTER_AXES,
+    DASHBOARD_BARS_PER_POSITION, DASHBOARD_SCATTER_AXES, DASHBOARD_SCATTER_AXES_2,
     POSITION_TO_ARCHETYPE_GROUP,
 )
 from shared.similarity import adjusted_similarity, tier_badge_color
@@ -30,60 +30,68 @@ st.set_page_config(page_title="Dashboard · Target Scouting", layout="wide", ini
 st.markdown(BASE_CSS, unsafe_allow_html=True)
 st.markdown("""
 <style>
-.block-container { padding-top:1.4rem !important; max-width:1400px !important; }
+.block-container { padding-top:1rem !important; max-width:1400px !important; }
 
 /* ── Player header ── */
 .player-header {
-    background:#111827; border-radius:10px; padding:16px 22px; margin-bottom:16px;
+    background:#111827; border-radius:10px; padding:10px 18px 0; margin-bottom:12px;
 }
 .player-name-lg {
-    font-size:24px; font-weight:700; color:white;
+    font-size:22px; font-weight:700; color:white;
     letter-spacing:-0.02em; line-height:1.1; font-family:'DM Sans',sans-serif;
 }
 .player-pos-line {
     font-family:'JetBrains Mono',monospace; font-size:9px;
     color:rgba(255,255,255,0.4); text-transform:uppercase;
-    letter-spacing:0.1em; margin-top:3px;
+    letter-spacing:0.1em; margin-top:2px;
 }
 .player-pill {
     display:inline-flex; flex-direction:column;
     background:rgba(255,255,255,0.07);
     border:0.5px solid rgba(255,255,255,0.12);
-    border-radius:4px; padding:3px 9px; margin:3px 3px 0 0;
+    border-radius:4px; padding:2px 8px; margin:2px 2px 0 0;
 }
 .player-pill .pl {
     font-family:'JetBrains Mono',monospace; font-size:7px;
     color:rgba(255,255,255,0.35); text-transform:uppercase; letter-spacing:0.06em;
 }
-.player-pill .pv { font-size:11px; font-weight:600; color:rgba(255,255,255,0.9); }
+.player-pill .pv { font-size:10px; font-weight:600; color:rgba(255,255,255,0.9); }
 .arch-pill {
     display:inline-flex; align-items:center; gap:5px;
-    border-radius:4px; padding:3px 9px; margin:3px 3px 0 0;
+    border-radius:4px; padding:2px 8px; margin:2px 2px 0 0;
     font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:700;
     text-transform:uppercase; letter-spacing:0.07em;
 }
-.cat-bars { margin-top:12px; display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }
+
+/* FIX 1 — category bars with score pill */
+.cat-bars { margin-top:8px; display:grid; grid-template-columns:repeat(5,1fr); gap:5px; }
 .cat-bar-lbl {
     font-family:'JetBrains Mono',monospace; font-size:8px;
     color:rgba(255,255,255,0.3); text-transform:uppercase;
-    letter-spacing:0.06em; margin-bottom:3px;
+    letter-spacing:0.06em;
 }
-.cat-bar-track { background:rgba(255,255,255,0.1); height:4px; border-radius:2px; }
-.cat-bar-fill  { height:4px; border-radius:2px; }
-.cat-bar-val {
-    font-family:'JetBrains Mono',monospace; font-size:10px;
-    font-weight:700; color:rgba(255,255,255,0.7); margin-top:2px;
+.cat-bar-header {
+    display:flex; align-items:center; gap:5px; margin-bottom:3px;
 }
+.cat-score-pill {
+    border-radius:4px; padding:2px 8px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px; font-weight:600; line-height:1;
+}
+.cat-bar-track { background:rgba(255,255,255,0.1); height:3px; border-radius:2px; }
+.cat-bar-fill  { height:3px; border-radius:2px; }
+
+/* FIX 6 — compact score box */
 .score-num-lg {
-    width:64px; height:64px; border-radius:8px;
+    width:50px; height:50px; border-radius:8px;
     display:flex; align-items:center; justify-content:center;
-    font-size:26px; font-weight:700; color:white; margin:0 auto;
+    font-size:22px; font-weight:700; color:white; margin:0 auto;
     font-family:'JetBrains Mono',monospace;
 }
 .header-bottom-bar {
     background:rgba(255,255,255,0.04);
     border-top:0.5px solid rgba(255,255,255,0.07);
-    margin:10px -22px -16px; padding:5px 22px;
+    margin:8px -18px 0; padding:4px 18px;
     border-radius:0 0 10px 10px;
     display:flex; gap:14px; align-items:center; flex-wrap:wrap;
 }
@@ -97,38 +105,66 @@ st.markdown("""
 .section-lbl {
     font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:700;
     color:#b0a898; text-transform:uppercase; letter-spacing:0.12em;
-    margin-bottom:10px; display:flex; align-items:center; gap:8px;
+    margin-bottom:8px; display:flex; align-items:center; gap:8px;
 }
 .section-lbl::after { content:''; flex:1; height:0.5px; background:#e0d8cc; }
-.pct-bar-row { margin-bottom:7px; }
+.pct-bar-row { margin-bottom:5px; }
 .pct-bar-stat {
     font-size:10px; color:#111827; display:flex;
     justify-content:space-between; margin-bottom:2px;
 }
-.pct-bar-track { background:#f0ebe2; height:6px; border-radius:3px; }
-.pct-bar-fill  { height:6px; border-radius:3px; }
+.pct-bar-track { background:#f0ebe2; height:5px; border-radius:3px; }
+.pct-bar-fill  { height:5px; border-radius:3px; }
 
-/* ── Similar players ── */
-.sim-card {
-    background:#fff; border:0.5px solid #e0d8cc; border-radius:6px;
-    padding:9px 12px; margin-bottom:6px;
+/* FIX 2 — equal-height row for style profile + radar */
+.equal-height-row {
+    display:grid; grid-template-columns:1fr 1fr;
+    align-items:stretch; gap:16px; margin-bottom:12px;
 }
-.sim-name { font-size:12px; font-weight:700; color:#111827; }
-.sim-meta { font-family:'JetBrains Mono',monospace; font-size:9px; color:#b0a898; margin-top:1px; }
-.sim-adj  { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700;
-             color:#c9a84c; margin-top:3px; }
+.eh-cell {
+    display:flex; flex-direction:column; min-height:400px;
+}
+
+/* FIX 4 — Similar players ranking */
+.sim-row {
+    display:flex; align-items:center; gap:8px;
+    padding:5px 8px; border-bottom:0.5px solid #f0ebe2;
+    cursor:pointer;
+}
+.sim-row:hover { background:#f7f4ee; }
+.sim-rank {
+    font-family:'JetBrains Mono',monospace; font-size:9px;
+    font-weight:700; color:#c9a84c; width:14px; flex-shrink:0;
+    text-align:right;
+}
+.sim-info { flex:1; min-width:0; }
+.sim-name { font-size:13px; font-weight:700; color:#111827;
+             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sim-meta { font-family:'JetBrains Mono',monospace; font-size:9px;
+             color:#b0a898; margin-top:1px; }
+.sim-right { flex-shrink:0; text-align:right; }
+.sim-adj   { font-family:'JetBrains Mono',monospace; font-size:10px;
+              font-weight:700; color:#c9a84c; }
 .tier-badge {
     font-family:'JetBrains Mono',monospace; font-size:7px; font-weight:700;
     text-transform:uppercase; letter-spacing:0.06em;
-    padding:2px 5px; border-radius:3px; float:right;
+    padding:1px 4px; border-radius:3px; display:inline-block; margin-top:2px;
 }
+.sim-chevron {
+    font-size:11px; color:#c9b89a; flex-shrink:0; padding-left:4px;
+}
+
+/* FIX 6 — smaller archetype badge */
+.arch-pill { font-size:9px !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ── Session state ─────────────────────────────────────────────────────────────
-for k, v in [("dashboard_player",None),("dashboard_team",None),
-              ("dashboard_position_group",None),("scout_notes",{})]:
-    if k not in st.session_state: st.session_state[k] = v
+for k, v in [("dashboard_player", None), ("dashboard_team", None),
+              ("dashboard_position_group", None), ("scout_notes", {}),
+              ("dashboard_position_filter", "Right Winger")]:
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 @st.cache_data
 def load_data(season="2025/26", min_minutes=0):
@@ -150,6 +186,13 @@ if "_season" not in st.session_state: st.session_state["_season"] = "2025/26"
 if "_min_min" not in st.session_state: st.session_state["_min_min"] = 900
 data = load_data(st.session_state["_season"], st.session_state["_min_min"])
 
+# Position labels for FIX 7
+POSITION_OPTIONS = [
+    "Centre-Back", "Right-Back", "Left-Back",
+    "Defensive Midfielder", "Central Midfielder", "Attacking Midfielder",
+    "Right Winger", "Left Winger", "Striker",
+]
+
 def _c(v):
     if v >= 75: return "#1a7a45"
     elif v >= 50: return "#91cf60"
@@ -161,6 +204,13 @@ def _pct_bar_color(v):
     elif v >= 60: return "#91cf60"
     elif v >= 40: return "#f0a500"
     return "#d73027"
+
+# FIX 1 — pill color + text color
+def _pill_color(v):
+    if v >= 80:   return "#1a9850", "#111827"
+    elif v >= 60: return "#91cf60", "#111827"
+    elif v >= 40: return "#f0a500", "#111827"
+    return "#d73027", "#ffffff"
 
 STAT_SHORT = {
     "xG per 90":"xG /90","xG per shot":"xG /shot","Finishing":"Finishing",
@@ -181,8 +231,6 @@ STAT_SHORT = {
 CAT_SHORT = {"Goalscoring":"Goals","Chance creation":"Chance cr.",
              "Dribbling":"Dribbling","Passing":"Passing","Defending":"Defending"}
 
-all_players = sorted(data["Player"].unique())
-
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     render_sidebar_nav("dashboard")
@@ -192,10 +240,32 @@ with st.sidebar:
         st.session_state["_min_min"] = min_minutes
         st.rerun()
 
+    # FIX 7 — Positie-eerst: position filter before player selector
+    st.markdown('<span class="sb-section-label">Position</span>', unsafe_allow_html=True)
+    pos_filter_idx = POSITION_OPTIONS.index(st.session_state["dashboard_position_filter"]) \
+                     if st.session_state["dashboard_position_filter"] in POSITION_OPTIONS else 6
+    sel_position_filter = st.selectbox(
+        "position_filter", POSITION_OPTIONS,
+        index=pos_filter_idx,
+        label_visibility="collapsed",
+        key="db_pos_filter"
+    )
+    st.session_state["dashboard_position_filter"] = sel_position_filter
+
+    # Filter players by selected position group
+    pg_for_filter = sel_position_filter  # direct match to position_groups key
+    pos_filtered_data = data[
+        data["Main Position"].isin(position_groups.get(pg_for_filter, []))
+    ] if pg_for_filter in position_groups else data
+    filtered_players = sorted(pos_filtered_data["Player"].unique())
+    if not filtered_players:
+        filtered_players = sorted(data["Player"].unique())
+
     st.markdown('<span class="sb-section-label">Player</span>', unsafe_allow_html=True)
     pre = st.session_state.dashboard_player
-    pi  = all_players.index(pre) if pre in all_players else 0
-    sel_player = st.selectbox("player", all_players, index=pi, label_visibility="collapsed")
+    pi  = filtered_players.index(pre) if pre in filtered_players else 0
+    sel_player = st.selectbox("player", filtered_players, index=pi, label_visibility="collapsed")
+
     p_rows = data[data["Player"] == sel_player]
     if p_rows.empty: st.warning("Player not found."); st.stop()
     teams    = p_rows["Team within selected timeframe"].unique()
@@ -205,12 +275,14 @@ with st.sidebar:
 
     st.markdown('<span class="sb-section-label">Position group</span>', unsafe_allow_html=True)
     main_pos = str(p_row.get("Main Position",""))
-    auto_pg  = next((pg for pg,pos in position_groups.items() if main_pos in pos),
+    auto_pg  = next((pg for pg, pos in position_groups.items() if main_pos in pos),
                     list(position_groups.keys())[0])
-    pre_pg   = st.session_state.get("dashboard_position_group") or auto_pg
+    # Default position group to match the position filter
+    pre_pg   = st.session_state.get("dashboard_position_group") or sel_position_filter or auto_pg
     pg_list  = list(position_groups.keys())
     position_group = st.selectbox("pg", pg_list,
-                                  index=pg_list.index(pre_pg) if pre_pg in pg_list else 0,
+                                  index=pg_list.index(pre_pg) if pre_pg in pg_list else
+                                        pg_list.index(sel_position_filter) if sel_position_filter in pg_list else 0,
                                   label_visibility="collapsed")
 
     st.markdown(
@@ -264,9 +336,6 @@ pos    = str(p_row2.get("Position","")).split(",")[0].strip()
 age    = p_row2.get("Age","—");    mins     = p_row2.get("Minutes played","—")
 foot   = p_row2.get("Foot","—");   height   = p_row2.get("Height","—")
 nation = p_row2.get("Birth country","—"); league = p_row2.get("League","—")
-value  = p_row2.get("Market value",None)
-val_str = f"€{int(value):,}" if isinstance(value,(int,float)) and not np.isnan(float(value)) else "—"
-contract = p_row2.get("Contract expires","—")
 
 pct_pool = compute_full_pct(data, active_pg, league_template_score, score_mode,
                             st.session_state["_season"])
@@ -308,20 +377,32 @@ try:
 except Exception:
     primary_arch, secondary_arch = None, None
 
-# ── Category bars ─────────────────────────────────────────────────────────────
+# ── FIX 1: Category bars with score pill ─────────────────────────────────────
 cat_bars_html = '<div class="cat-bars">'
 for cat in report_template:
-    v = cat_scores.get(cat,0); col = _c(v); lbl = CAT_SHORT.get(cat,cat)
-    cat_bars_html += (f'<div><div class="cat-bar-lbl">{lbl}</div>'
-                      f'<div class="cat-bar-track"><div class="cat-bar-fill" '
-                      f'style="width:{v:.0f}%;background:{col};"></div></div>'
-                      f'<div class="cat-bar-val">{v:.0f}</div></div>')
+    v = cat_scores.get(cat, 0)
+    col = _c(v)
+    lbl = CAT_SHORT.get(cat, cat)
+    pill_bg, pill_txt = _pill_color(v)
+    cat_bars_html += (
+        f'<div>'
+        f'  <div class="cat-bar-header">'
+        f'    <span class="cat-bar-lbl">{lbl}</span>'
+        f'    <span class="cat-score-pill" style="background:{pill_bg};color:{pill_txt};">'
+        f'      {v:.0f}'
+        f'    </span>'
+        f'  </div>'
+        f'  <div class="cat-bar-track">'
+        f'    <div class="cat-bar-fill" style="width:{v:.0f}%;background:{col};"></div>'
+        f'  </div>'
+        f'</div>'
+    )
 cat_bars_html += '</div>'
 
 # ── Pills row (including archetype) ───────────────────────────────────────────
 pills_html = ""
-for lbl, val in [("Age",age),("Min",mins),("Foot",foot),
-                 ("Height",f"{height} cm"),("Nat.",nation),("Value",val_str)]:
+for lbl, val in [("Age", age), ("Min", mins), ("Foot", foot),
+                 ("Height", f"{height} cm"), ("Nat.", nation)]:
     pills_html += (f'<div class="player-pill">'
                    f'<span class="pl">{lbl}</span>'
                    f'<span class="pv">{val}</span></div>')
@@ -329,7 +410,7 @@ for lbl, val in [("Age",age),("Min",mins),("Foot",foot),
 if primary_arch and primary_arch != "—":
     ac = archetype_color(primary_arch)
     try:
-        r,g,b = int(ac[1:3],16), int(ac[3:5],16), int(ac[5:7],16)
+        r, g, b = int(ac[1:3], 16), int(ac[3:5], 16), int(ac[5:7], 16)
         pills_html += (f'<div class="arch-pill" '
                        f'style="background:rgba({r},{g},{b},0.15);'
                        f'color:{ac};border:0.5px solid rgba({r},{g},{b},0.4);">'
@@ -344,17 +425,17 @@ st.markdown(f"""
     <div style="flex:1;">
       <div class="player-pos-line">{pos} · {active_team} · {league} · {st.session_state["_season"]}</div>
       <div class="player-name-lg">{active_player}</div>
-      <div style="display:flex;flex-wrap:wrap;margin-top:8px;">{pills_html}</div>
+      <div style="display:flex;flex-wrap:wrap;margin-top:6px;">{pills_html}</div>
       {cat_bars_html}
     </div>
     <div style="text-align:center;flex-shrink:0;">
       <div class="score-num-lg" style="background:{ov_color};">{ov_display:.0f}</div>
       <div style="font-family:'JetBrains Mono',monospace;font-size:7px;
-                  color:rgba(255,255,255,0.3);text-transform:uppercase;margin-top:4px;">Overall</div>
+                  color:rgba(255,255,255,0.3);text-transform:uppercase;margin-top:3px;">Overall</div>
       <div style="font-family:'JetBrains Mono',monospace;font-size:7px;
-                  color:rgba(201,168,76,0.5);margin-top:2px;">{league_template_score.split()[0]} · {score_mode.split()[0]}</div>
+                  color:rgba(201,168,76,0.5);margin-top:1px;">{league_template_score.split()[0]} · {score_mode.split()[0]}</div>
       <div style="font-family:'JetBrains Mono',monospace;font-size:7px;
-                  color:rgba(255,255,255,0.2);margin-top:2px;">{rank_str}</div>
+                  color:rgba(255,255,255,0.2);margin-top:1px;">{rank_str}</div>
     </div>
   </div>
   <div class="header-bottom-bar">
@@ -368,7 +449,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ROW 1: Style bars (2 cols of 6) LEFT | Radar RIGHT
+# ROW 1: Style bars LEFT | Radar RIGHT  — FIX 2: gelijke hoogte
 # ══════════════════════════════════════════════════════════════════════════════
 col_left, col_right = st.columns([1, 1.1])
 
@@ -383,9 +464,8 @@ with col_left:
                 unsafe_allow_html=True)
 
     if avail_bars and not pos_pool.empty:
-        # Two columns of 6
-        half   = math.ceil(len(avail_bars) / 2)
-        left_s = avail_bars[:half]
+        half    = math.ceil(len(avail_bars) / 2)
+        left_s  = avail_bars[:half]
         right_s = avail_bars[half:]
 
         bc1, bc2 = st.columns(2)
@@ -408,15 +488,14 @@ with col_left:
 
                     col_fill = _pct_bar_color(pct_val)
                     short    = STAT_SHORT.get(stat, stat[:22])
+                    # FIX 3 — alleen absolute waarde, geen percentiel-getal
                     raw_str  = f"{raw_f:.2f}" if raw_f is not None else "—"
 
                     bars_html += f"""
                     <div class="pct-bar-row">
                       <div class="pct-bar-stat">
                         <span>{short}</span>
-                        <span style="color:#7a7060;">{raw_str}
-                          <span style="color:{col_fill};font-weight:700;"> {pct_val:.0f}</span>
-                        </span>
+                        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#7a7060;">{raw_str}</span>
                       </div>
                       <div class="pct-bar-track">
                         <div class="pct-bar-fill" style="width:{pct_val:.0f}%;background:{col_fill};"></div>
@@ -441,14 +520,16 @@ with col_right:
     except Exception as e:
         st.error(f"Radar error: {e}")
 
-st.markdown('<hr style="border:none;border-top:0.5px solid #e0d8cc;margin:8px 0 16px;">',
+st.markdown('<hr style="border:none;border-top:0.5px solid #e0d8cc;margin:6px 0 12px;">',
             unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ROW 2: Similar players | Scatter | Trend
+# ROW 2: Similar players | Scatter 1 | Scatter 2
+# FIX 4: compacte ranking-lijst  |  FIX 5: tweede scatter ipv season trend
 # ══════════════════════════════════════════════════════════════════════════════
-c_sim, c_scatter, c_trend = st.columns([1, 1.1, 0.8])
+c_sim, c_scatter, c_scatter2 = st.columns([1, 1.1, 1.1])
 
+# ── FIX 4 — Similar players as compact ranking list ───────────────────────────
 with c_sim:
     st.markdown('<div class="section-lbl">Similar players</div>', unsafe_allow_html=True)
     try:
@@ -470,179 +551,140 @@ with c_sim:
             target_row=p_row2, candidates_df=sim_cands,
             sim_stats=sim_stats, target_league=pl_league, min_minutes=600)
 
-        for _, sr in sim_results.head(5).iterrows():
-            sim_name = sr["Player"]
-            sim_team = sr["Team within selected timeframe"]
-            sim_lg   = sr.get("League","")
-            sim_age  = sr.get("Age","—")
-            adj_pct  = sr["adjusted_sim"] * 100
-            badge    = sr.get("tier_badge","Same tier")
-            badge_c  = tier_badge_color(badge)
+        top10 = sim_results.head(10)
+        for i, (_, sr) in enumerate(top10.iterrows()):
+            sim_name  = sr["Player"]
+            sim_team  = sr["Team within selected timeframe"]
+            sim_lg    = sr.get("League","")
+            sim_age   = sr.get("Age","—")
+            adj_pct   = sr["adjusted_sim"] * 100
+            badge     = sr.get("tier_badge","Same tier")
+            badge_c   = tier_badge_color(badge)
+
+            # Compact league abbreviation
+            lg_short = sim_lg[:12] if len(str(sim_lg)) > 12 else sim_lg
 
             st.markdown(f"""
-            <div class="sim-card">
-              <span class="tier-badge"
-                style="background:{badge_c}22;color:{badge_c};border:0.5px solid {badge_c}44;">
-                {badge}
-              </span>
-              <div class="sim-name">{sim_name}</div>
-              <div class="sim-meta">{sim_team} · {sim_lg} · {sim_age} yrs</div>
-              <div class="sim-adj">{adj_pct:.0f}% match</div>
+            <div class="sim-row">
+              <span class="sim-rank">{i+1}</span>
+              <div class="sim-info">
+                <div class="sim-name">{sim_name}</div>
+                <div class="sim-meta">{sim_team[:18]} · {lg_short} · {sim_age} yrs</div>
+              </div>
+              <div class="sim-right">
+                <div class="sim-adj">{adj_pct:.0f}%</div>
+                <span class="tier-badge"
+                  style="background:{badge_c}22;color:{badge_c};border:0.5px solid {badge_c}44;">
+                  {badge}
+                </span>
+              </div>
+              <span class="sim-chevron">›</span>
             </div>""", unsafe_allow_html=True)
-            if st.button(f"Open {sim_name.split()[-1]} →",
-                         key=f"sim_{hash(sim_name+sim_team) % 99999}"):
+
+            # Invisible button for navigation — rendered as minimal text
+            if st.button("›", key=f"sim_{i}_{hash(sim_name+sim_team) % 99999}",
+                         help=f"Open {sim_name}",
+                         use_container_width=False):
                 st.session_state.dashboard_player = sim_name
                 st.session_state.dashboard_team   = sim_team
                 st.session_state.dashboard_position_group = active_pg
+                st.session_state.dashboard_position_filter = sel_position_filter
                 st.rerun()
+
     except Exception as e:
         st.error(f"Similar players error: {e}")
 
-with c_scatter:
-    arch_group = POSITION_TO_ARCHETYPE_GROUP.get(active_pg, "W")
-    x_stat, y_stat = DASHBOARD_SCATTER_AXES.get(arch_group, ("xG per 90","xA per 90"))
+
+def _render_scatter(col_ctx, x_stat, y_stat, active_player, active_pg, data,
+                    position_groups, STAT_SHORT, scatter_key="sc1"):
+    """Reusable scatter plot renderer."""
     x_s = STAT_SHORT.get(x_stat, x_stat)
     y_s = STAT_SHORT.get(y_stat, y_stat)
-    st.markdown(f'<div class="section-lbl">Scatter — {x_s} vs {y_s}</div>',
-                unsafe_allow_html=True)
-    try:
-        pool_sc = data[data["Main Position"].isin(position_groups[active_pg])] \
-                      .dropna(subset=[x_stat, y_stat]).copy()
-        if not pool_sc.empty:
-            fig_s = go.Figure()
-            for _, row in pool_sc.iterrows():
-                it = row["Player"] == active_player
-                fig_s.add_trace(go.Scatter(
-                    x=[row[x_stat]], y=[row[y_stat]], mode="markers",
-                    marker=dict(size=12 if it else 5,
-                                color="#c9a84c" if it else "#111827",
-                                opacity=1.0 if it else 0.18,
-                                symbol="star" if it else "circle",
-                                line=dict(width=1.5 if it else 0, color="#111827")),
-                    hovertemplate=(f"<b>{row['Player']}</b><br>"
-                                   f"{x_stat}: {row[x_stat]:.2f}<br>"
-                                   f"{y_stat}: {row[y_stat]:.2f}<extra></extra>"),
-                    showlegend=False))
-            me = pool_sc[pool_sc["Player"]==active_player]
-            if not me.empty:
-                fig_s.add_annotation(
-                    x=me[x_stat].iloc[0], y=me[y_stat].iloc[0],
-                    text=active_player, showarrow=True, arrowhead=2,
-                    arrowcolor="#c9a84c", arrowwidth=1.5, ax=20, ay=-28,
-                    font=dict(size=10, color="#111827"),
-                    bgcolor="#f0ebe2", bordercolor="#c9a84c", borderpad=3)
-            fig_s.add_vline(x=pool_sc[x_stat].mean(),
-                            line=dict(color="rgba(17,24,39,0.12)", dash="dot", width=1))
-            fig_s.add_hline(y=pool_sc[y_stat].mean(),
-                            line=dict(color="rgba(17,24,39,0.12)", dash="dot", width=1))
-            fig_s.update_layout(
-                paper_bgcolor="#faf7f2", plot_bgcolor="#faf7f2", height=360,
-                margin=dict(l=40,r=10,t=20,b=40),
-                xaxis=dict(title=x_s, tickfont=dict(color="#7a7060", size=9),
-                           gridcolor="rgba(0,0,0,0.04)", zeroline=False),
-                yaxis=dict(title=y_s, tickfont=dict(color="#7a7060", size=9),
-                           gridcolor="rgba(0,0,0,0.04)", zeroline=False),
-                hoverlabel=dict(bgcolor="#111827", font=dict(size=10, color="white")),
-            )
-            st.plotly_chart(fig_s, use_container_width=True)
-    except Exception as e:
-        st.error(f"Scatter error: {e}")
 
-with c_trend:
-    st.markdown('<div class="section-lbl">Season trend</div>', unsafe_allow_html=True)
-    try:
-        both_seasons = load_both_seasons(st.session_state["_min_min"])
-        trend_pts = []
-        for s, df_s in sorted(both_seasons.items(), reverse=True):
-            pool_s = compute_scores(df_s, active_pg, league_template_score, score_mode)
-            m = (pool_s["Player"]==active_player) & \
-                (pool_s["Team within selected timeframe"]==active_team)
-            if m.any():
-                trend_pts.append({"season":s,
-                                  "score":float(pool_s[m]["overall_adj"].iloc[0])})
+    with col_ctx:
+        arch_group_label = POSITION_TO_ARCHETYPE_GROUP.get(active_pg, "W")
+        st.markdown(
+            f'<div class="section-lbl">Scatter — {x_s} vs {y_s}</div>',
+            unsafe_allow_html=True)
+        try:
+            pool_sc = data[data["Main Position"].isin(position_groups[active_pg])] \
+                          .dropna(subset=[x_stat, y_stat]).copy()
+            if not pool_sc.empty:
+                fig_s = go.Figure()
+                for _, row in pool_sc.iterrows():
+                    it = row["Player"] == active_player
+                    fig_s.add_trace(go.Scatter(
+                        x=[row[x_stat]], y=[row[y_stat]], mode="markers",
+                        marker=dict(size=12 if it else 5,
+                                    color="#c9a84c" if it else "#111827",
+                                    opacity=1.0 if it else 0.18,
+                                    symbol="star" if it else "circle",
+                                    line=dict(width=1.5 if it else 0, color="#111827")),
+                        hovertemplate=(f"<b>{row['Player']}</b><br>"
+                                       f"{x_stat}: {row[x_stat]:.2f}<br>"
+                                       f"{y_stat}: {row[y_stat]:.2f}<extra></extra>"),
+                        showlegend=False))
+                me = pool_sc[pool_sc["Player"]==active_player]
+                if not me.empty:
+                    fig_s.add_annotation(
+                        x=me[x_stat].iloc[0], y=me[y_stat].iloc[0],
+                        text=active_player, showarrow=True, arrowhead=2,
+                        arrowcolor="#c9a84c", arrowwidth=1.5, ax=20, ay=-28,
+                        font=dict(size=10, color="#111827"),
+                        bgcolor="#f0ebe2", bordercolor="#c9a84c", borderpad=3)
+                fig_s.add_vline(x=pool_sc[x_stat].mean(),
+                                line=dict(color="rgba(17,24,39,0.12)", dash="dot", width=1))
+                fig_s.add_hline(y=pool_sc[y_stat].mean(),
+                                line=dict(color="rgba(17,24,39,0.12)", dash="dot", width=1))
+                fig_s.update_layout(
+                    paper_bgcolor="#faf7f2", plot_bgcolor="#faf7f2", height=320,
+                    margin=dict(l=40, r=10, t=10, b=40),
+                    xaxis=dict(title=x_s, tickfont=dict(color="#7a7060", size=9),
+                               gridcolor="rgba(0,0,0,0.04)", zeroline=False),
+                    yaxis=dict(title=y_s, tickfont=dict(color="#7a7060", size=9),
+                               gridcolor="rgba(0,0,0,0.04)", zeroline=False),
+                    hoverlabel=dict(bgcolor="#111827", font=dict(size=10, color="white")),
+                )
+                st.plotly_chart(fig_s, use_container_width=True, key=scatter_key)
+                # Caption onder de scatter
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;'
+                    f'color:#b0a898;margin-top:-10px;text-align:center;">'
+                    f'{active_pg.upper()} — {x_s.upper()} VS {y_s.upper()}</div>',
+                    unsafe_allow_html=True)
+        except Exception as e:
+            st.error(f"Scatter error: {e}")
 
-        if len(trend_pts) >= 2:
-            sx = [p["season"] for p in reversed(trend_pts)]
-            sy = [p["score"]  for p in reversed(trend_pts)]
-            delta = sy[-1] - sy[-2]
-            dcol  = "#1a7a45" if delta > 0 else ("#c0392b" if delta < 0 else "#7a7060")
-            darr  = "↑" if delta > 0 else ("↓" if delta < 0 else "—")
-            dsign = "+" if delta > 0 else ""
 
-            fig_t = go.Figure()
-            fig_t.add_trace(go.Scatter(
-                x=sx, y=sy, mode="lines+markers+text",
-                line=dict(color="#c9a84c", width=2.5),
-                marker=dict(size=10, color="#c9a84c",
-                            line=dict(width=2, color="#111827")),
-                text=[f"{s:.0f}" for s in sy],
-                textposition="top center",
-                textfont=dict(family="JetBrains Mono", size=11, color="#111827"),
-            ))
-            fig_t.update_layout(
-                paper_bgcolor="#faf7f2", plot_bgcolor="#faf7f2", height=200,
-                margin=dict(l=30,r=10,t=20,b=30), showlegend=False,
-                xaxis=dict(tickfont=dict(color="#7a7060",size=9),
-                           gridcolor="rgba(0,0,0,0.04)"),
-                yaxis=dict(tickfont=dict(color="#7a7060",size=9),
-                           gridcolor="rgba(0,0,0,0.04)",
-                           range=[max(0,min(sy)-12), min(100,max(sy)+12)]),
-            )
-            st.plotly_chart(fig_t, use_container_width=True)
-            st.markdown(
-                f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;'
-                f'color:#b0a898;margin-top:-8px;">'
-                f'{sx[-2]} → {sx[-1]} '
-                f'<span style="color:{dcol};font-weight:700;">{darr} {dsign}{delta:.1f}</span>'
-                f'</div>', unsafe_allow_html=True)
-        elif len(trend_pts) == 1:
-            p = trend_pts[0]
-            st.markdown(
-                f'<div style="background:#f0ebe2;border-radius:6px;padding:12px;text-align:center;">'
-                f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;'
-                f'color:#b0a898;">{p["season"]}</div>'
-                f'<div style="font-size:28px;font-weight:700;color:{_c(p["score"])};">'
-                f'{p["score"]:.0f}</div>'
-                f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:9px;'
-                f'color:#b0a898;margin-top:4px;">Single season</div></div>',
-                unsafe_allow_html=True)
-    except Exception as e:
-        st.info(f"Trend unavailable: {e}")
+# ── Scatter 1 (centre) ────────────────────────────────────────────────────────
+arch_group = POSITION_TO_ARCHETYPE_GROUP.get(active_pg, "W")
+x1, y1 = DASHBOARD_SCATTER_AXES.get(arch_group, ("xG per 90", "xA per 90"))
+_render_scatter(c_scatter, x1, y1, active_player, active_pg, data,
+                position_groups, STAT_SHORT, scatter_key="sc1")
 
-    # Contract + value
-    st.markdown(f"""
-    <div style="background:#f0ebe2;border-radius:6px;padding:10px 12px;margin-top:8px;">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#b0a898;
-                  text-transform:uppercase;letter-spacing:0.1em;margin-bottom:7px;">Context</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-        <div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:7px;
-                      color:#b0a898;margin-bottom:1px;">Market value</div>
-          <div style="font-size:13px;font-weight:700;color:#111827;">{val_str}</div>
-        </div>
-        <div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:7px;
-                      color:#b0a898;margin-bottom:1px;">Contract</div>
-          <div style="font-size:12px;font-weight:700;color:#111827;">{contract}</div>
-        </div>
-      </div>
-    </div>""", unsafe_allow_html=True)
+# ── FIX 5: Scatter 2 (right, replaces season trend) ─────────────────────────
+x2, y2 = DASHBOARD_SCATTER_AXES_2.get(arch_group, ("xG per 90", "xG per shot"))
+_render_scatter(c_scatter2, x2, y2, active_player, active_pg, data,
+                position_groups, STAT_SHORT, scatter_key="sc2")
 
 # ── Download whole dashboard as HTML ─────────────────────────────────────────
-st.markdown('<hr style="border:none;border-top:0.5px solid #e0d8cc;margin:16px 0 12px;">',
+st.markdown('<hr style="border:none;border-top:0.5px solid #e0d8cc;margin:12px 0 10px;">',
             unsafe_allow_html=True)
 
 def build_dashboard_html():
     """Build a self-contained static HTML snapshot of the dashboard."""
     cats_html = ""
     for cat in report_template:
-        v = cat_scores.get(cat, 0); col = _c(v); lbl = CAT_SHORT.get(cat, cat)
+        v = cat_scores.get(cat, 0)
+        col = _c(v)
+        lbl = CAT_SHORT.get(cat, cat)
+        pill_bg, pill_txt = _pill_color(v)
         cats_html += (
             f'<div style="background:#f0ebe2;border-left:3px solid {col};'
             f'border-radius:0 4px 4px 0;padding:5px 10px;margin-bottom:4px;">'
             f'<span style="font-size:11px;font-weight:700;color:#111;">{lbl}</span>'
-            f'<span style="float:right;background:{col};color:white;'
-            f'padding:1px 7px;border-radius:4px;font-size:11px;">{v:.0f}</span></div>'
+            f'<span style="float:right;background:{pill_bg};color:{pill_txt};'
+            f'padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">{v:.0f}</span></div>'
         )
     bars_section = ""
     if avail_bars and not pos_pool.empty:
@@ -660,11 +702,11 @@ def build_dashboard_html():
             short    = STAT_SHORT.get(stat, stat[:28])
             raw_str  = f"{raw_f:.2f}" if raw_f is not None else "—"
             bars_section += (
-                f'<div style="margin-bottom:7px;">'
+                f'<div style="margin-bottom:6px;">'
                 f'<div style="font-size:10px;color:#111;display:flex;'
                 f'justify-content:space-between;margin-bottom:2px;">'
                 f'<span>{short}</span>'
-                f'<span style="color:{col_fill};font-weight:700;">{raw_str} · {pct_val:.0f}</span>'
+                f'<span style="font-family:JetBrains Mono,monospace;color:#7a7060;">{raw_str}</span>'
                 f'</div>'
                 f'<div style="background:#f0ebe2;height:5px;border-radius:3px;">'
                 f'<div style="width:{pct_val:.0f}%;height:5px;border-radius:3px;'
@@ -679,19 +721,19 @@ def build_dashboard_html():
 *{{box-sizing:border-box;margin:0;padding:0;}}
 body{{font-family:'DM Sans',Arial,sans-serif;background:#faf7f2;color:#111827;
       -webkit-font-smoothing:antialiased;padding:24px;max-width:1000px;margin:0 auto;}}
-.header{{background:#111827;border-radius:8px;padding:16px 20px;margin-bottom:16px;
+.header{{background:#111827;border-radius:8px;padding:14px 18px;margin-bottom:14px;
           display:flex;justify-content:space-between;align-items:center;}}
-.p-name{{font-size:22px;font-weight:700;color:white;letter-spacing:-0.01em;}}
+.p-name{{font-size:20px;font-weight:700;color:white;letter-spacing:-0.01em;}}
 .p-sub{{font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,0.4);
          text-transform:uppercase;letter-spacing:0.1em;margin-top:3px;}}
-.score-box{{min-width:56px;height:56px;border-radius:8px;display:flex;align-items:center;
+.score-box{{min-width:50px;height:50px;border-radius:8px;display:flex;align-items:center;
              justify-content:center;font-family:'JetBrains Mono',monospace;
-             font-size:22px;font-weight:700;color:white;padding:0 10px;}}
-.two-col{{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}}
+             font-size:20px;font-weight:700;color:white;padding:0 10px;}}
+.two-col{{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}}
 .section-title{{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;
                  text-transform:uppercase;letter-spacing:0.12em;color:#b0a898;
-                 border-bottom:0.5px solid #e0d8cc;padding-bottom:4px;margin-bottom:10px;}}
-.footer{{margin-top:20px;padding-top:12px;border-top:0.5px solid #e0d8cc;
+                 border-bottom:0.5px solid #e0d8cc;padding-bottom:4px;margin-bottom:8px;}}
+.footer{{margin-top:18px;padding-top:10px;border-top:0.5px solid #e0d8cc;
           font-family:'JetBrains Mono',monospace;font-size:9px;color:#b0a898;
           display:flex;justify-content:space-between;}}
 @media print{{body{{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
@@ -702,7 +744,7 @@ body{{font-family:'DM Sans',Arial,sans-serif;background:#faf7f2;color:#111827;
   <div>
     <div class="p-name">{active_player}</div>
     <div class="p-sub">{pos} · {active_team} · {league} · {age} yrs · {mins} min</div>
-    {f'<div style="margin-top:6px;font-family:JetBrains Mono,monospace;font-size:9px;color:rgba(201,168,76,0.8);">◆ {primary_arch}</div>' if primary_arch else ''}
+    {f'<div style="margin-top:5px;font-family:JetBrains Mono,monospace;font-size:9px;color:rgba(201,168,76,0.8);">◆ {primary_arch}</div>' if primary_arch else ''}
   </div>
   <div class="score-box" style="background:{ov_color};">{ov_display:.0f}</div>
 </div>
@@ -713,18 +755,11 @@ body{{font-family:'DM Sans',Arial,sans-serif;background:#faf7f2;color:#111827;
     {cats_html}
   </div>
   <div>
-    <div class="section-title">Context</div>
+    <div class="section-title">Rank</div>
     <div style="background:#f0ebe2;border-radius:6px;padding:12px;">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div><div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#b0a898;">Market value</div>
-             <div style="font-size:15px;font-weight:700;">{val_str}</div></div>
-        <div><div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#b0a898;">Contract</div>
-             <div style="font-size:13px;font-weight:700;">{contract}</div></div>
-        <div><div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#b0a898;">Overall score</div>
-             <div style="font-size:15px;font-weight:700;">{ov_display:.0f}</div></div>
-        <div><div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#b0a898;">Rank</div>
-             <div style="font-size:13px;font-weight:700;">{rank_str}</div></div>
-      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#b0a898;">Overall score</div>
+      <div style="font-size:24px;font-weight:700;color:{ov_color};">{ov_display:.0f}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#b0a898;margin-top:6px;">{rank_str}</div>
     </div>
   </div>
 </div>

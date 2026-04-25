@@ -116,13 +116,22 @@ DASHBOARD_BARS_PER_POSITION = {
     ],
 }
 
-# Fixed scatter axes per archetype position group
+# Fixed scatter axes per archetype position group — scatter 1 (centre column)
 DASHBOARD_SCATTER_AXES = {
     "CB":  ("Ball progression through passing",  "PAdj Defensive duels won per 90"),
     "FB":  ("Progressive runs per 90",            "Accurate crosses per received pass"),
     "MID": ("Defensive duels per 90",             "Ball progression through passing"),
     "W":   ("Progressive runs per 90",            "xA per 90"),
     "ST":  ("xG per 90",                          "xA per 90"),
+}
+
+# Fixed scatter axes per archetype position group — scatter 2 (right column, replaces season trend)
+DASHBOARD_SCATTER_AXES_2 = {
+    "CB":  ("Progressive passes per 90",  "Passing accuracy (prog/1/3/forw)"),
+    "FB":  ("xA per 90",                  "Defensive duels won, %"),
+    "MID": ("xG per 90",                  "xA per 90"),
+    "W":   ("xG per 90",                  "xG per shot"),
+    "ST":  ("Touches in box per 90",      "xG per shot"),
 }
 
 # ── Archetype position group mapping (also in archetypes.py) ─────────────────
