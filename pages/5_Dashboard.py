@@ -513,7 +513,6 @@ with col_right:
                                     percentile_basis=pct_basis,
                                     radar_type="Position Template",
                                     show_avg=True, compact=True)
-        fig_r.set_size_inches(5, 4)
         st.pyplot(fig_r, use_container_width=True)
     except Exception as e:
         st.error(f"Radar error: {e}")
