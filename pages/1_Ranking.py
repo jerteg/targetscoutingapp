@@ -1,471 +1,587 @@
-import os, sys
+"""
+pages/1_Ranking.py — Versie 2
+
+Twee modi:
+  A. Find by role  → dimensie-gebaseerde rol-rankings via shared/roles_v2.py
+  B. Similar to player → archetype-match + tier-adjusted cosine similarity
+                         (zoals in Dashboard, maar als zelfstandige zoek-pagina)
+
+Nieuwe filters: leeftijd, voet, contract, minuten, league, market value.
+Behoud: shortlist, compare, export.
+"""
+import os, sys, datetime
+from io import BytesIO
+
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, BASE_DIR)
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 
-from shared.data_processing import load_season_data
+from shared.data_processing import preprocess_data, load_season_data
 from shared.season_filter import render_season_filter
 from shared.styles import BASE_CSS
 from shared.sidebar_nav import render_sidebar_nav
 from shared.templates import (
-    template_config, role_config, position_groups,
-    position_to_template, position_map,
+    position_groups, position_to_template, position_map,
     TOP5_LEAGUES, NEXT14_LEAGUES,
-    LEAGUE_MULTIPLIERS_ALL, LEAGUE_MULTIPLIERS_NEXT14,
+)
+from shared.roles_v2 import (
+    ROLE_CONFIG_V2, POSITION_DIMENSIONS,
+    compute_dimension_scores, compute_role_score,
+    get_role_options,
+)
+from shared.scoring import compute_role_ranking
+from shared.similarity import adjusted_similarity, tier_badge_color, LEAGUE_TIERS
+from shared.archetypes import (
+    train_or_load_models, get_player_archetype, ARCHETYPE_COLORS,
 )
 
-# ── Position label → short tag ─────────────────────────────────────────────────
-POS_LABEL_SHORT = {
-    "Right-Back":"RB","Right Wing-Back":"RWB","Left-Back":"LB","Left Wing-Back":"LWB",
-    "Centre-Back":"CB","Goalkeeper":"GK","Defensive Midfielder":"DM",
-    "Central Midfielder":"CM","Attacking Midfielder":"AM",
-    "Right Winger":"RW","Left Winger":"LW","Winger":"W","Striker":"ST",
-}
-# Also map Wyscout raw positions
-POS_RAW_SHORT = {
-    "RB":"RB","RWB":"RWB","LB":"LB","LWB":"LWB","CB":"CB","LCB":"CB","RCB":"CB",
-    "DMF":"DM","LDMF":"DM","RDMF":"DM","LCMF":"CM","RCMF":"CM","AMF":"AM",
-    "LW":"LW","RW":"RW","LWF":"LW","RWF":"RW","LAMF":"AM","RAMF":"AM","CF":"ST",
-}
 
-def _pos_short(row):
-    lbl = str(row.get("Position Label","")).split(",")[0].strip()
-    if lbl in POS_LABEL_SHORT: return POS_LABEL_SHORT[lbl]
-    raw = str(row.get("Main Position","")).split(",")[0].strip()
-    if raw in POS_RAW_SHORT: return POS_RAW_SHORT[raw]
-    return raw[:3].upper() if raw else "?"
-
-def _zscores(data, stats):
-    df = data.copy()
-    for s in stats:
-        df[s] = pd.to_numeric(df[s], errors="coerce")
-        m, sd = df[s].mean(), df[s].std()
-        df[f"{s}_z"] = 0 if sd == 0 else (df[s] - m) / sd
-    return df
-
-def _scale(df, stats):
-    df = df.copy()
-    for s in stats:
-        df[f"{s}_score"] = df[f"{s}_z"].rank(pct=True) * 100
-        df[f"{s}_score"] = df[f"{s}_score"].fillna(50)
-    return df
-
-def _filter_scores(df, stats, filters):
-    f = df.copy()
-    for s in stats:
-        lo, hi = filters[s]
-        f = f[f[f"{s}_score"].between(lo, hi)]
-    return f
-
-def _rating(df, stats, weights):
-    df = df.copy()
-    tw = sum(weights.values())
-    df["Rating"] = sum(df[f"{s}_score"] * w for s, w in weights.items()) / tw
-    return df
-
-def _league_adj(df, tmpl):
-    df = df.copy()
-    def _m(lg):
-        if tmpl == "Top 5":   return LEAGUE_MULTIPLIERS_ALL.get(lg,1.0) if lg in TOP5_LEAGUES else 1.0
-        if tmpl == "Next 14": return LEAGUE_MULTIPLIERS_NEXT14.get(lg,1.0) if lg in NEXT14_LEAGUES else 1.0
-        return LEAGUE_MULTIPLIERS_ALL.get(lg, 1.0)
-    df["Rating"] = df.apply(lambda r: r["Rating"] * _m(r["League"]), axis=1)
-    return df
-
-def _c(v):
-    if v >= 75: return "#1a7a45"
-    elif v >= 50: return "#91cf60"
-    elif v >= 25: return "#f0a500"
-    return "#d73027"
-
-st.set_page_config(page_title="Ranking · Target Scouting", layout="wide",
-                   initial_sidebar_state="expanded")
+# ──────────────────────────────────────────────────────────────────────────────
+# Page setup
+# ──────────────────────────────────────────────────────────────────────────────
+st.set_page_config(page_title="Ranking · Target Scouting", layout="wide", initial_sidebar_state="expanded")
 st.markdown(BASE_CSS, unsafe_allow_html=True)
+
+# Page-specifieke CSS — mode toggle, ranking row, etc
 st.markdown("""
 <style>
-.block-container { padding-top:1.6rem !important; max-width:1280px !important; }
-.role-callout {
-    background:#111827; border-radius:8px; padding:16px 20px; margin-bottom:20px;
-    display:flex; justify-content:space-between; align-items:flex-start; gap:20px;
+.mode-toggle {
+    display: flex; gap: 0; margin-bottom: 14px;
+    border: 0.5px solid #e0d8cc; border-radius: 6px; overflow: hidden;
+    background: #fff;
 }
-.rc-pg { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:700;
-          text-transform:uppercase; letter-spacing:0.12em; color:rgba(201,168,76,0.5); margin-bottom:5px; }
-.rc-name { font-size:17px; font-weight:700; color:#c9a84c; letter-spacing:-0.01em;
-            font-family:'DM Sans',sans-serif; }
-.rc-desc { font-size:12px; color:rgba(255,255,255,0.5); margin-top:4px; line-height:1.5; }
-.rc-stat-pills { display:flex; gap:5px; flex-wrap:wrap; margin-top:10px; }
-.rc-stat-pill { font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:700;
-                padding:3px 8px; background:rgba(201,168,76,0.12); color:#c9a84c;
-                border:0.5px solid rgba(201,168,76,0.3); border-radius:3px;
-                text-transform:uppercase; letter-spacing:0.05em; }
-.rank-table { width:100%; border-collapse:collapse; }
-.rank-table thead th { font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:700;
-    text-transform:uppercase; letter-spacing:0.1em; color:#b0a898; padding:10px 10px;
-    border-bottom:1px solid #e0d8cc; background:#f0ebe2; text-align:left; white-space:nowrap; }
-.rank-table thead th.r { text-align:right; }
-.rank-table tbody tr { transition:background 0.1s; }
-.rank-table tbody tr:hover { background:#f0ebe2; }
-.rank-table tbody td { padding:10px 10px; border-bottom:0.5px solid #e0d8cc; font-size:13px; }
-.rank-table tbody td.r { text-align:right; }
-.rank-badge { width:26px; height:26px; border-radius:50%; display:inline-flex;
-               align-items:center; justify-content:center;
-               font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700; }
-.rank-badge.gold   { background:#c9a84c; color:#111827; }
-.rank-badge.silver { background:#9aa5b4; color:#fff; }
-.rank-badge.bronze { background:#a0674a; color:#fff; }
-.rank-badge.plain  { background:transparent; color:#b0a898; font-size:11px; }
-.pos-tag { font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:700;
-            background:#111827; color:#c9a84c; padding:2px 6px; border-radius:3px;
-            text-transform:uppercase; letter-spacing:0.05em; }
-.rating-bar-wrap { display:flex; align-items:center; gap:8px; }
-.rating-bar { height:6px; border-radius:3px; background:#f0ebe2; flex:1; overflow:hidden; }
-.rating-bar-fill { height:100%; border-radius:3px; }
-.rating-val { font-family:'JetBrains Mono',monospace; font-size:11px;
-               font-weight:700; min-width:34px; text-align:right; }
-.section-lbl { font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:700;
-               color:#b0a898; text-transform:uppercase; letter-spacing:0.12em;
-               margin-bottom:10px; display:flex; align-items:center; gap:10px; }
-.section-lbl::after { content:''; flex:1; height:0.5px; background:#e0d8cc; }
+.mode-toggle div {
+    flex: 1; padding: 10px 16px; text-align: center; cursor: pointer;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: #7a7060; transition: all 0.12s;
+}
+.mode-toggle div.active {
+    background: #111827; color: #c9a84c; font-weight: 600;
+}
+.mode-info {
+    background: #f0ebe2; border-left: 3px solid #c9a84c;
+    border-radius: 0 6px 6px 0; padding: 10px 14px; margin-bottom: 14px;
+    font-size: 12px; color: #7a7060;
+}
+.role-desc {
+    font-size: 11px; color: #7a7060; font-style: italic;
+    margin: 6px 0 10px 0;
+}
+.archetype-pill {
+    display: inline-block; padding: 4px 10px; border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    font-weight: 600; letter-spacing: 0.04em;
+    color: #faf7f2; margin-left: 8px;
+}
+.dim-row {
+    display: grid; grid-template-columns: 160px 1fr 40px;
+    gap: 8px; align-items: center; margin-bottom: 4px;
+    font-size: 11px;
+}
+.dim-track {
+    background: #f0ebe2; height: 6px; border-radius: 2px;
+}
+.dim-fill { height: 6px; border-radius: 2px; }
+.tier-badge {
+    display: inline-block; padding: 2px 7px; border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace; font-size: 9px;
+    font-weight: 500; letter-spacing: 0.04em;
+    color: white;
+}
 </style>
 """, unsafe_allow_html=True)
 
-for k, v in [("shortlist",[]),("dashboard_player",None),
-              ("dashboard_team",None),("dashboard_position_group",None)]:
-    if k not in st.session_state: st.session_state[k] = v
+# Init session state
+for k, v in [
+    ("shortlist", []),
+    ("dashboard_player", None), ("dashboard_team", None),
+    ("dashboard_position_group", None),
+    ("ranking_mode", "Find by role"),
+]:
+    if k not in st.session_state:
+        st.session_state[k] = v
+
 
 @st.cache_data
-def load_data(season="2025/26", min_minutes=0):
+def load_data(season: str = "2025/26", min_minutes: int = 0):
     return load_season_data(season, min_minutes)
 
-if "_season" not in st.session_state: st.session_state["_season"] = "2025/26"
-if "_min_min" not in st.session_state: st.session_state["_min_min"] = 900
+
+# Season/minutes komen uit de sidebar
+if "_season" not in st.session_state:
+    st.session_state["_season"] = "2025/26"
+if "_min_min" not in st.session_state:
+    st.session_state["_min_min"] = 900
+
 data = load_data(st.session_state["_season"], st.session_state["_min_min"])
 
-# ── Sidebar ────────────────────────────────────────────────────────────────────
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Sidebar
+# ──────────────────────────────────────────────────────────────────────────────
 with st.sidebar:
     render_sidebar_nav("ranking")
+
     season, min_minutes = render_season_filter(key_prefix="1")
     if season != st.session_state.get("_season") or min_minutes != st.session_state.get("_min_min"):
-        st.session_state["_season"] = season; st.session_state["_min_min"] = min_minutes; st.rerun()
-
-    st.markdown('<span class="sb-section-label">League</span>', unsafe_allow_html=True)
-    league_template = st.radio("lt", ["Top 5","Next 14","Both"],
-                               horizontal=True, label_visibility="collapsed")
-
-    st.markdown('<span class="sb-section-label">Position</span>', unsafe_allow_html=True)
-    position_group = st.selectbox("pg", list(position_groups.keys()),
-                                  label_visibility="collapsed")
-    roles_for_pos  = role_config.get(position_group, {})
-    role_options   = ["— Custom —"] + list(roles_for_pos.keys())
-
-    # Pre-select role from session state if set
-    pre_role = st.session_state.get("rk_pre_role","— Custom —")
-    pre_role_idx = role_options.index(pre_role) if pre_role in role_options else 0
-    selected_role = st.selectbox("role", role_options, index=pre_role_idx,
-                                 label_visibility="collapsed")
-
-    st.markdown('<span class="sb-section-label">Filters</span>', unsafe_allow_html=True)
-    age_range     = st.slider("Age", 16, 40, (16, 40))
-    minutes_range = st.slider("Minutes", 0, 10_000, (0, 10_000), step=100)
-    foot          = st.multiselect("Foot", ["left","right","both"])
-    contract_filter = st.selectbox("Contract expires",
-                                   ["Any","< 6 months","< 12 months","< 18 months","< 24 months"],
-                                   key="rk_contract")
-
-    st.markdown('<span class="sb-section-label">Performance</span>', unsafe_allow_html=True)
-    template_stats = template_config[position_to_template[position_group]]["stats"]
-    use_role       = selected_role != "— Custom —"
-
-    if use_role:
-        role_data   = roles_for_pos[selected_role]
-        stats       = list(role_data["stats"].keys())
-        raw_weights = role_data["stats"]
-        st.caption(f"📌 {role_data['description']}")
-        weights       = {s: st.slider(s, 0.0, 1.0, float(raw_weights[s]), step=0.025)
-                         for s in stats}
-        score_filters = {s: (0, 100) for s in stats}
-    else:
-        stats = st.multiselect("Stats", template_stats, default=[])
-        if not stats:
-            st.info("Select stats to generate ranking"); st.stop()
-        score_filters = {s: st.slider(s, 0, 100, (0, 100)) for s in stats}
-        default_w     = 1 / len(stats)
-        weights       = {s: st.slider(f"{s} weight", 0.0, 1.0, default_w) for s in stats}
-
-    tw = sum(weights.values())
-    if tw == 0: st.warning("Total weight is 0"); st.stop()
-    norm_w = {s: w / tw for s, w in weights.items()}
-
-# ── Data pipeline ─────────────────────────────────────────────────────────────
-positions = position_groups[position_group]
-pos_data  = data[data["Main Position"].isin(positions)].copy()
-if league_template == "Top 5":   pos_data = pos_data[pos_data["League"].isin(TOP5_LEAGUES)]
-elif league_template == "Next 14": pos_data = pos_data[pos_data["League"].isin(NEXT14_LEAGUES)]
-
-fil = pos_data[pos_data["Age"].between(*age_range) &
-               pos_data["Minutes played"].between(*minutes_range)].copy()
-if foot: fil = fil[fil["Foot"].isin(foot)]
-if contract_filter != "Any" and "Contract expires" in fil.columns:
-    import pandas as _pd2, datetime
-    threshold_map = {"< 6 months":6,"< 12 months":12,"< 18 months":18,"< 24 months":24}
-    threshold = threshold_map[contract_filter]
-    today_ts  = _pd2.Timestamp(datetime.date.today())
-    fil["_contract_exp"] = _pd2.to_datetime(fil["Contract expires"], errors="coerce")
-    fil["_months_left"]  = ((fil["_contract_exp"] - today_ts).dt.days / 30)
-    fil = fil[fil["_months_left"].between(0, threshold)]
-
-idx     = ["Player","Team within selected timeframe"]
-scored  = _scale(_zscores(pos_data, stats), stats)
-fscored = _filter_scores(scored, stats, score_filters)
-final   = fscored[fscored.set_index(idx).index.isin(fil.set_index(idx).index)]
-ranking = _league_adj(_rating(final, stats, norm_w), league_template)
-
-if ranking.empty:
-    st.markdown(f"## {position_group} Ranking")
-    st.warning("No players found with current filters."); st.stop()
-
-ranking["Rank"] = ranking["Rating"].rank(method="first", ascending=False).astype(int)
-ranking = ranking.sort_values("Rating", ascending=False).reset_index(drop=True)
-
-# ── Page header ────────────────────────────────────────────────────────────────
-role_label = f" · {selected_role}" if use_role else ""
-st.markdown(f"""
-<div style="display:flex;align-items:baseline;gap:12px;margin-bottom:20px;">
-  <h1 style="font-size:20px;font-weight:700;letter-spacing:-0.01em;font-family:'DM Sans',sans-serif;">
-    {position_group} Ranking{role_label}
-  </h1>
-  <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#b0a898;
-               text-transform:uppercase;letter-spacing:0.08em;">
-    {league_template} · {len(ranking)} players
-  </span>
-</div>
-""", unsafe_allow_html=True)
-
-# ── Role callout ───────────────────────────────────────────────────────────────
-if use_role:
-    role_data  = roles_for_pos[selected_role]
-    stat_pills = "".join(f'<span class="rc-stat-pill">{s} ×{w:.2f}</span>'
-                         for s, w in raw_weights.items())
-    st.markdown(f"""
-    <div class="role-callout">
-      <div>
-        <div class="rc-pg">{position_group} · {league_template}</div>
-        <div class="rc-name">{selected_role}</div>
-        <div class="rc-desc">{role_data.get("description","")}</div>
-        <div class="rc-stat-pills">{stat_pills}</div>
-      </div>
-    </div>""", unsafe_allow_html=True)
-
-# Change role button — inline in main content
-with st.expander("🔄 Change role", expanded=False):
-    col_pg, col_role = st.columns(2)
-    with col_pg:
-        new_pg = st.selectbox("Position group", list(position_groups.keys()),
-                               index=list(position_groups.keys()).index(position_group),
-                               key="cr_pg")
-    with col_role:
-        new_roles = ["— Custom —"] + list(role_config.get(new_pg, {}).keys())
-        new_role  = st.selectbox("Role", new_roles, key="cr_role")
-    if st.button("Apply", key="apply_role"):
-        st.session_state["rk_pre_role"] = new_role
+        st.session_state["_season"] = season
+        st.session_state["_min_min"] = min_minutes
         st.rerun()
 
-tab_r, tab_c, tab_s = st.tabs(["Ranking","Compare","Shortlist"])
+    # ── Mode selector ──
+    st.markdown('<span class="sb-section-label">Search mode</span>', unsafe_allow_html=True)
+    mode = st.radio(
+        "mode",
+        ["Find by role", "Similar to player"],
+        label_visibility="collapsed",
+        key="rk_mode",
+    )
+
+    st.markdown('<span class="sb-section-label">League pool</span>', unsafe_allow_html=True)
+    league_template = st.radio(
+        "lt", ["Top 5", "Next 14", "Both"],
+        horizontal=True, label_visibility="collapsed",
+    )
+
+    # ── Mode-specific UI ──
+    if mode == "Find by role":
+        st.markdown('<span class="sb-section-label">Position</span>', unsafe_allow_html=True)
+        pos_options = list(ROLE_CONFIG_V2.keys())
+        # Filter "Winger" alias eruit (alleen Right/Left tonen)
+        pos_options = [p for p in pos_options if p != "Winger"]
+        position_label = st.selectbox(
+            "pos", pos_options,
+            label_visibility="collapsed",
+            key="rk_pos_role",
+        )
+
+        st.markdown('<span class="sb-section-label">Role</span>', unsafe_allow_html=True)
+        role_names = get_role_options(position_label)
+        if not role_names:
+            st.warning(f"No roles defined for {position_label}")
+            st.stop()
+        selected_role = st.selectbox(
+            "role", role_names,
+            label_visibility="collapsed",
+            key="rk_role",
+        )
+
+        # Show role description
+        role_def = ROLE_CONFIG_V2[position_label][selected_role]
+        st.markdown(
+            f'<div class="role-desc">{role_def["description"]}</div>',
+            unsafe_allow_html=True,
+        )
+
+    else:  # Similar to player
+        st.markdown('<span class="sb-section-label">Reference player</span>', unsafe_allow_html=True)
+        all_players = sorted(data["Player"].unique())
+        # Pre-fill from session_state
+        pre = st.session_state.get("ranking_ref_player", "")
+        idx_p = all_players.index(pre) if pre in all_players else 0
+        ref_player = st.selectbox(
+            "ref",
+            all_players,
+            index=idx_p,
+            label_visibility="collapsed",
+            key="rk_ref_player",
+        )
+
+        # Determine team if multiple
+        ref_rows = data[data["Player"] == ref_player]
+        if ref_rows.empty:
+            st.warning("Player not found")
+            st.stop()
+        teams_ref = ref_rows["Team within selected timeframe"].unique()
+        if len(teams_ref) > 1:
+            ref_team = st.selectbox("Team", teams_ref, key="rk_ref_team")
+        else:
+            ref_team = teams_ref[0]
+        ref_row = ref_rows[ref_rows["Team within selected timeframe"] == ref_team].iloc[0]
+
+        ref_pos = str(ref_row.get("Main Position", ""))
+        # Auto-detect positiegroep
+        ref_pg = next(
+            (pg for pg, ps in position_groups.items() if ref_pos in ps),
+            list(position_groups.keys())[0],
+        )
+
+        st.caption(f"Ref pos: **{ref_pg}** · {ref_team} · {ref_row.get('League','—')}")
+
+    # ── Universele filters ──
+    st.markdown('<span class="sb-section-label">Filters</span>', unsafe_allow_html=True)
+    age_range = st.slider("Age", 16, 40, (16, 40), key="rk_age")
+    minutes_range = st.slider("Minutes", 0, 5000, (600, 5000), step=100, key="rk_min")
+    foot_filter = st.multiselect("Foot", ["left", "right", "both"], key="rk_foot")
+
+    contract_filter = st.selectbox(
+        "Contract expires",
+        ["Any", "< 6 months", "< 12 months", "< 18 months", "< 24 months"],
+        key="rk_contract",
+    )
+
+    # Market value filter (optioneel)
+    if "Market value" in data.columns:
+        mv_max = int(data["Market value"].fillna(0).max() / 1_000_000) + 1
+        mv_range = st.slider(
+            "Market value (€M)", 0, max(mv_max, 100), (0, max(mv_max, 100)),
+            step=1, key="rk_mv",
+        )
+    else:
+        mv_range = None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Page title
+# ──────────────────────────────────────────────────────────────────────────────
+if mode == "Find by role":
+    st.title(f"{position_label} · {selected_role}")
+    st.markdown(
+        f'<div class="mode-info">Mode <b>Find by role</b> · '
+        f'Score gebaseerd op gewogen dimensies '
+        f'<span style="color:#c9a84c;">(VIF-vrij)</span> · '
+        f'{league_template} leagues</div>',
+        unsafe_allow_html=True,
+    )
+else:
+    arch_models = train_or_load_models(data)
+    primary, secondary, p_dist, s_dist = get_player_archetype(
+        ref_row, arch_models, ref_pg
+    )
+    arch_color = ARCHETYPE_COLORS.get(primary, "#7a7060")
+    sec_html = ""
+    if secondary:
+        sec_color = ARCHETYPE_COLORS.get(secondary, "#7a7060")
+        sec_html = f'<span class="archetype-pill" style="background:{sec_color};">{secondary}</span>'
+    st.title(f"Similar to {ref_player}")
+    st.markdown(
+        f'<div class="mode-info">Mode <b>Similar to player</b> · '
+        f'Reference: <b>{ref_player}</b> ({ref_team}) · '
+        f'<span class="archetype-pill" style="background:{arch_color};">{primary}</span>{sec_html}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Data pipeline — algemene filters
+# ──────────────────────────────────────────────────────────────────────────────
+def apply_filters(df: pd.DataFrame) -> pd.DataFrame:
+    """Pas algemene filters toe die voor beide modi gelden."""
+    out = df.copy()
+
+    # League
+    if league_template == "Top 5":
+        out = out[out["League"].isin(TOP5_LEAGUES)]
+    elif league_template == "Next 14":
+        out = out[out["League"].isin(NEXT14_LEAGUES)]
+
+    # Age
+    out["Age"] = pd.to_numeric(out["Age"], errors="coerce")
+    out = out[out["Age"].between(*age_range)]
+
+    # Minutes
+    out["Minutes played"] = pd.to_numeric(out["Minutes played"], errors="coerce")
+    out = out[out["Minutes played"].between(*minutes_range)]
+
+    # Foot
+    if foot_filter:
+        out = out[out["Foot"].isin(foot_filter)]
+
+    # Contract
+    if contract_filter != "Any" and "Contract expires" in out.columns:
+        thresholds = {
+            "< 6 months": 6, "< 12 months": 12,
+            "< 18 months": 18, "< 24 months": 24,
+        }
+        thr = thresholds[contract_filter]
+        today_ts = pd.Timestamp(datetime.date.today())
+        out["_contract_exp"] = pd.to_datetime(out["Contract expires"], errors="coerce")
+        out["_months_left"] = (out["_contract_exp"] - today_ts).dt.days / 30
+        out = out[out["_months_left"].between(0, thr)]
+
+    # Market value
+    if mv_range is not None and "Market value" in out.columns:
+        mv = pd.to_numeric(out["Market value"], errors="coerce").fillna(0) / 1_000_000
+        out = out[mv.between(*mv_range)]
+
+    return out
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# RANKING COMPUTATION
+# ──────────────────────────────────────────────────────────────────────────────
+if mode == "Find by role":
+    # Map naar league_template format dat compute_role_ranking verwacht
+    lt_map = {"Top 5": "Top 5 leagues", "Next 14": "Next 14 competitions", "Both": "Both"}
+    pool_with_dims = compute_role_ranking(
+        data, position_label, selected_role,
+        league_template=lt_map[league_template],
+        apply_league_multiplier=True,
+        apply_shrinkage=True,
+    )
+
+    # Apply user filters
+    pool_with_dims = apply_filters(pool_with_dims)
+    if pool_with_dims.empty:
+        st.warning("No players match the filters.")
+        st.stop()
+
+    pool_with_dims = pool_with_dims.sort_values("role_score", ascending=False).reset_index(drop=True)
+    pool_with_dims["Rank"] = pool_with_dims.index + 1
+    ranking = pool_with_dims
+    score_col = "role_score"
+
+else:  # Similar to player mode
+    # Bouw similarity pool — zelfde positiegroep als referentie-speler
+    pos_codes = position_groups.get(ref_pg, [])
+    sim_pool = data[data["Main Position"].isin(pos_codes)].copy()
+    sim_pool = apply_filters(sim_pool)
+
+    if sim_pool.empty:
+        st.warning("No players match the filters.")
+        st.stop()
+
+    # Use radar stats for similarity (consistent with Dashboard)
+    from shared.templates import ALL_RADAR_STATS
+    sim_stats = [s for s in ALL_RADAR_STATS if s in sim_pool.columns]
+    if len(sim_stats) < 5:
+        st.error("Not enough stats available for similarity")
+        st.stop()
+
+    ref_league = ref_row.get("League", "")
+    sim_results = adjusted_similarity(
+        target_row=ref_row,
+        candidates_df=sim_pool,
+        sim_stats=sim_stats,
+        target_league=ref_league,
+        min_minutes=minutes_range[0],
+    )
+
+    if sim_results.empty:
+        st.warning("No similar players found.")
+        st.stop()
+
+    # Filter target player out
+    sim_results = sim_results[
+        ~((sim_results["Player"] == ref_player) &
+          (sim_results["Team within selected timeframe"] == ref_team))
+    ].reset_index(drop=True)
+
+    sim_results["Rank"] = sim_results.index + 1
+    sim_results["match_pct"] = (sim_results["adjusted_sim"] * 100).round(1)
+    ranking = sim_results
+    score_col = "match_pct"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# TABS
+# ──────────────────────────────────────────────────────────────────────────────
+tab_r, tab_c, tab_s = st.tabs(["Ranking", "Compare", "Shortlist"])
+
 
 with tab_r:
-    pre_search = st.session_state.get("pre_select_player","") or ""
-    search     = st.text_input("", placeholder="Search player, club or nationality…",
-                               label_visibility="collapsed", value=pre_search)
-    if pre_search: st.session_state["pre_select_player"] = ""
-
+    # Search box
+    search = st.text_input(
+        "search",
+        placeholder="Search player by name…",
+        label_visibility="collapsed",
+        key="rk_search",
+    )
     dr = ranking.copy()
-    if search: dr = dr[dr["Player"].str.contains(search, case=False, na=False)]
+    if search:
+        dr = dr[dr["Player"].str.contains(search, case=False, na=False)]
 
-    st.markdown(f"""
-    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#b0a898;margin-bottom:12px;">
-      <b style="color:#111827;">{len(dr)}</b> players &nbsp;·&nbsp;
-      <b style="color:#111827;">{league_template}</b> &nbsp;·&nbsp;
-      <b style="color:#111827;">{selected_role}</b>
-    </div>""", unsafe_allow_html=True)
+    n_total = len(dr)
+    st.caption(f"{n_total} players · {league_template} leagues · {len(data['League'].unique())} leagues in dataset")
 
-    # Build HTML table (no HTML sl-btn — use Streamlit controls below)
-    rows_html = ""
-    for i, (_, row) in enumerate(dr.head(30).iterrows()):
-        rank = int(row["Rank"])
-        if rank == 1:   badge = '<span class="rank-badge gold">1</span>'
-        elif rank == 2: badge = '<span class="rank-badge silver">2</span>'
-        elif rank == 3: badge = '<span class="rank-badge bronze">3</span>'
-        else:           badge = f'<span class="rank-badge plain">{rank}</span>'
+    # Build display dataframe
+    if mode == "Find by role":
+        cols_to_show = ["Rank", "Player", "Age", "Position Label", "Foot",
+                        "Team within selected timeframe", "League", "role_score"]
+        col_renames = {
+            "Team within selected timeframe": "Team",
+            "Position Label": "Position",
+            "role_score": "Score",
+        }
+    else:
+        cols_to_show = ["Rank", "Player", "Age", "Position Label", "Foot",
+                        "Team within selected timeframe", "League",
+                        "match_pct", "tier_badge"]
+        col_renames = {
+            "Team within selected timeframe": "Team",
+            "Position Label": "Position",
+            "match_pct": "Match %",
+            "tier_badge": "Tier",
+        }
 
-        rating = float(row["Rating"])
-        col    = _c(rating)
-        pct    = min(100, rating)
-        pos_lbl = _pos_short(row)
-        team    = row.get("Team within selected timeframe","")
-        league  = row.get("League","")
-        age     = row.get("Age","")
-        mins    = row.get("Minutes played","")
-        try: age_str  = str(int(float(age)))
-        except: age_str = "—"
-        try: mins_str = f"{int(float(mins)):,}"
-        except: mins_str = "—"
+    # Add Market value if exists
+    if "Market value" in dr.columns:
+        dr["MV"] = pd.to_numeric(dr["Market value"], errors="coerce").fillna(0) / 1_000_000
+        dr["MV"] = dr["MV"].apply(lambda x: f"€{x:.1f}M" if x > 0 else "—")
+        cols_to_show.insert(-1 if mode == "Find by role" else -2, "MV")
 
-        rows_html += f"""<tr>
-          <td style="width:42px;">{badge}</td>
-          <td>
-            <div style="font-weight:700;font-family:'DM Sans',sans-serif;">{row['Player']}</div>
-            <div style="margin-top:2px;"><span class="pos-tag">{pos_lbl}</span></div>
-          </td>
-          <td style="color:#7a7060;font-size:12px;">{team}</td>
-          <td style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#b0a898;">{league}</td>
-          <td class="r" style="font-family:'JetBrains Mono',monospace;font-size:12px;">{age_str}</td>
-          <td class="r" style="font-family:'JetBrains Mono',monospace;font-size:12px;">{mins_str}</td>
-          <td style="min-width:160px;">
-            <div class="rating-bar-wrap">
-              <div class="rating-bar">
-                <div class="rating-bar-fill" style="width:{pct:.0f}%;background:{col};"></div>
-              </div>
-              <span class="rating-val" style="color:{col};">{rating:.1f}</span>
-            </div>
-          </td>
-        </tr>"""
+    available_cols = [c for c in cols_to_show if c in dr.columns]
+    disp = dr[available_cols].head(50).rename(columns=col_renames).copy()
 
-    st.markdown(f"""
-    <div style="background:#fff;border:0.5px solid #e0d8cc;border-radius:8px;overflow:hidden;">
-    <table class="rank-table">
-      <thead><tr>
-        <th>#</th><th>Player</th><th>Club</th><th>League</th>
-        <th class="r">Age</th><th class="r">Min</th>
-        <th style="min-width:160px;">Rating</th>
-      </tr></thead>
-      <tbody>{rows_html}</tbody>
-    </table></div>""", unsafe_allow_html=True)
+    # Format numeric columns
+    if "Score" in disp.columns:
+        disp["Score"] = disp["Score"].map(lambda x: f"{x:.1f}")
+    if "Match %" in disp.columns:
+        disp["Match %"] = disp["Match %"].map(lambda x: f"{x:.1f}%")
+    disp["Age"] = disp["Age"].astype("Int64").astype(str)
+    disp["Rank"] = disp["Rank"].astype(str)
 
-    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+    st.dataframe(disp, use_container_width=True, hide_index=True, height=540)
 
-    # Open in Dashboard
-    st.markdown('<div class="section-lbl">Open in Dashboard</div>', unsafe_allow_html=True)
-    dash_p = st.selectbox("Select player",
-                          ["—"] + dr["Player"].head(30).tolist(), key="dash_sel")
-    if st.button("Open Dashboard →", key="open_dash"):
-        if dash_p != "—":
-            row2 = dr[dr["Player"] == dash_p].iloc[0]
-            st.session_state.dashboard_player         = dash_p
-            st.session_state.dashboard_team           = row2["Team within selected timeframe"]
-            st.session_state.dashboard_position_group = position_group
-            st.session_state.dashboard_generated      = True
-            st.switch_page("pages/5_Dashboard.py")
-        else:
-            st.warning("Select a player first.")
+    st.markdown("---")
 
-    # Shortlist
-    st.markdown('<div class="section-lbl">Add to shortlist</div>', unsafe_allow_html=True)
-    to_add = st.selectbox("Select player for shortlist",
-                          ["—"] + dr["Player"].head(30).tolist(), key="sl_add")
-    if st.button("+ Add to shortlist", key="btn_sl_add"):
-        if to_add != "—":
-            if to_add not in st.session_state.shortlist:
-                st.session_state.shortlist.append(to_add)
-                st.success(f"✓ {to_add} added to shortlist.")
+    # Action buttons
+    ac1, ac2, ac3 = st.columns([2, 2, 1])
+    with ac1:
+        st.markdown("**Open in Dashboard**")
+        dash_p = st.selectbox(
+            "Select player",
+            ["—"] + dr["Player"].head(50).tolist(),
+            key="dash_sel",
+            label_visibility="collapsed",
+        )
+        if st.button("Open Dashboard →", key="open_dash", use_container_width=True):
+            if dash_p != "—":
+                row = dr[dr["Player"] == dash_p].iloc[0]
+                st.session_state.dashboard_player = dash_p
+                st.session_state.dashboard_team = row["Team within selected timeframe"]
+                # Map naar Dashboard's positiegroep nomenclatuur
+                if mode == "Find by role":
+                    st.session_state.dashboard_position_group = position_label
+                else:
+                    st.session_state.dashboard_position_group = ref_pg
+                st.session_state["pre_select_player"] = dash_p
+                st.switch_page("pages/5_Dashboard.py")
             else:
+                st.warning("Select a player first.")
+
+    with ac2:
+        st.markdown("**Add to shortlist**")
+        sl_p = st.selectbox(
+            "Select for shortlist",
+            ["—"] + dr["Player"].head(50).tolist(),
+            key="sl_add",
+            label_visibility="collapsed",
+        )
+        if st.button("Add to shortlist", key="btn_sl_add", use_container_width=True):
+            if sl_p != "—" and sl_p not in st.session_state.shortlist:
+                st.session_state.shortlist.append(sl_p)
+                st.success(f"{sl_p} added.")
+            elif sl_p in st.session_state.shortlist:
                 st.info("Already in shortlist.")
 
-    # Export
-    st.markdown('<div class="section-lbl">Export</div>', unsafe_allow_html=True)
-    disp = (dr[["Rank","Player","Age","Position Label","Foot",
-                "Team within selected timeframe","League","Rating"]]
-            .head(30)
-            .rename(columns={"Team within selected timeframe":"Team",
-                             "Position Label":"Position"})
-            .round(1))
-    disp["Rank"]   = disp["Rank"].astype(str)
-    disp["Rating"] = disp["Rating"].map(lambda x: f"{x:.1f}")
-    disp["Age"]    = disp["Age"].astype(str)
-
-    ce1, ce2 = st.columns(2)
-    with ce1:
-        try:
-            from io import BytesIO
-            buf = BytesIO()
-            with pd.ExcelWriter(buf, engine="openpyxl") as w:
-                disp.to_excel(w, index=False, sheet_name="Ranking")
-            st.download_button("Download Excel", buf.getvalue(),
-                               f"{position_group}_ranking.xlsx",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        except Exception:
-            st.caption("openpyxl not installed — Excel export unavailable")
-
-    with ce2:
-        hr = "".join(f"<tr>{''.join(f'<td>{v}</td>' for v in row)}</tr>"
-                     for row in disp.values.tolist())
-        hh = "".join(f"<th>{c}</th>" for c in disp.columns)
-        html_out = (
-            f"<html><head><style>"
-            f"body{{font-family:'DM Sans',Arial,sans-serif;background:#faf7f2;padding:20px;}}"
-            f"table{{border-collapse:collapse;width:100%;}}"
-            f"th{{background:#111827;color:#c9a84c;padding:8px 12px;text-align:left;"
-            f"font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.05em;}}"
-            f"td{{padding:7px 12px;border-bottom:1px solid #e0d8cc;font-size:12px;}}"
-            f"tr:nth-child(even){{background:#f0ebe2;}}"
-            f"</style></head><body>"
-            f"<h2 style='font-family:DM Sans;margin-bottom:16px;color:#111827;'>"
-            f"{position_group} – {selected_role}</h2>"
-            f"<table><thead><tr>{hh}</tr></thead><tbody>{hr}</tbody></table>"
-            f"</body></html>"
+    with ac3:
+        st.markdown("**Export**")
+        buf = BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as w:
+            disp.to_excel(w, index=False, sheet_name="Ranking")
+        fname = (
+            f"{position_label}_{selected_role}".replace(" ", "_")
+            if mode == "Find by role"
+            else f"similar_to_{ref_player.replace(' ', '_')}"
         )
-        st.download_button("Download HTML", html_out.encode(),
-                           f"{position_group}_ranking.html", mime="text/html")
+        st.download_button(
+            "Excel",
+            buf.getvalue(),
+            f"{fname}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
 
+
+# ──────────────────────────────────────────────────────────────────────────────
+# COMPARE TAB
+# ──────────────────────────────────────────────────────────────────────────────
 with tab_c:
-    st.markdown('<div class="section-lbl">Compare two players</div>', unsafe_allow_html=True)
-    ca, cb = st.columns(2)
-    with ca: pa = st.selectbox("Player A", ["—"] + ranking["Player"].tolist(), key="cmp_a")
-    with cb: pb = st.selectbox("Player B", ["—"] + ranking["Player"].tolist(), key="cmp_b")
-    if pa != "—" and pb != "—" and pa != pb:
-        ra, rb = ranking[ranking["Player"]==pa].iloc[0], ranking[ranking["Player"]==pb].iloc[0]
-        cols_c = (["Player","Age","Position Label","Foot",
-                   "Team within selected timeframe","League","Rating"]
-                  + [f"{s}_score" for s in stats])
-        def _f(r,k):
-            v = r.get(k,"")
-            return f"{v:.1f}" if isinstance(v, float) else str(v)
-        rows_cmp = [{"Metric": k.replace("_score"," (score)")
-                                 .replace("Team within selected timeframe","Team"),
-                     pa: _f(ra,k), pb: _f(rb,k)} for k in cols_c]
-        st.dataframe(pd.DataFrame(rows_cmp), use_container_width=True, hide_index=True)
-    elif pa == pb and pa != "—":
-        st.info("Select two different players.")
-    else:
-        st.info("Select two players to compare.")
+    st.markdown("### Compare two players")
 
+    if mode == "Find by role":
+        # Vergelijk dimensie-scores
+        ca, cb = st.columns(2)
+        with ca:
+            pa = st.selectbox("Player A", ["—"] + ranking["Player"].head(50).tolist(), key="cmp_a")
+        with cb:
+            pb = st.selectbox("Player B", ["—"] + ranking["Player"].head(50).tolist(), key="cmp_b")
+
+        if pa != "—" and pb != "—" and pa != pb:
+            ra = ranking[ranking["Player"] == pa].iloc[0]
+            rb = ranking[ranking["Player"] == pb].iloc[0]
+
+            # Dimensie-vergelijking
+            dims = list(POSITION_DIMENSIONS[position_label].keys())
+            comparison_rows = []
+            for dim in dims:
+                va = ra.get(f"dim_{dim}", 0)
+                vb = rb.get(f"dim_{dim}", 0)
+                weight = ROLE_CONFIG_V2[position_label][selected_role]["weights"].get(dim, 0)
+                comparison_rows.append({
+                    "Dimension": dim,
+                    "Weight in role": f"{weight*100:.0f}%",
+                    pa: f"{va:.0f}",
+                    pb: f"{vb:.0f}",
+                })
+            comparison_rows.append({
+                "Dimension": "ROLE SCORE",
+                "Weight in role": "—",
+                pa: f"{ra['role_score']:.1f}",
+                pb: f"{rb['role_score']:.1f}",
+            })
+            st.dataframe(pd.DataFrame(comparison_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("Select two different players to compare.")
+    else:
+        st.info("Compare-tab is in role-mode beschikbaar (dimensie-vergelijking). Switch naar Find by role om te vergelijken.")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# SHORTLIST TAB
+# ──────────────────────────────────────────────────────────────────────────────
 with tab_s:
-    st.markdown('<div class="section-lbl">Shortlist</div>', unsafe_allow_html=True)
+    st.markdown("### Shortlist")
     if not st.session_state.shortlist:
         st.info("Your shortlist is empty. Add players from the Ranking tab.")
     else:
-        sl_in_ranking = [p for p in st.session_state.shortlist
-                         if p in ranking["Player"].values]
-        sl_df = ranking[ranking["Player"].isin(sl_in_ranking)][
-            ["Rank","Player","Age","Position Label","Foot",
-             "Team within selected timeframe","League","Rating"]
-        ].rename(columns={"Team within selected timeframe":"Team",
-                          "Position Label":"Position"}).round(1)
-        sl_df["Rating"] = sl_df["Rating"].map(lambda x: f"{x:.1f}")
-        st.dataframe(sl_df, use_container_width=True, hide_index=True)
+        sl_data = data[data["Player"].isin(st.session_state.shortlist)].copy()
+        sl_disp_cols = [
+            "Player", "Age", "Main Position", "Foot",
+            "Team within selected timeframe", "League",
+        ]
+        if "Market value" in sl_data.columns:
+            sl_data["MV"] = pd.to_numeric(sl_data["Market value"], errors="coerce").fillna(0) / 1_000_000
+            sl_data["MV"] = sl_data["MV"].apply(lambda x: f"€{x:.1f}M" if x > 0 else "—")
+            sl_disp_cols.append("MV")
+        if "Contract expires" in sl_data.columns:
+            sl_disp_cols.append("Contract expires")
+
+        sl_avail = [c for c in sl_disp_cols if c in sl_data.columns]
+        sl_disp = sl_data[sl_avail].rename(columns={
+            "Team within selected timeframe": "Team",
+            "Main Position": "Position",
+        })
+        st.dataframe(sl_disp, use_container_width=True, hide_index=True)
 
         rm = st.selectbox("Remove player", ["—"] + st.session_state.shortlist, key="rm")
         if st.button("Remove", key="btn_rm") and rm != "—":
-            st.session_state.shortlist.remove(rm); st.rerun()
+            st.session_state.shortlist.remove(rm)
+            st.rerun()
 
-        try:
-            from io import BytesIO as _BytesIO
-            buf2 = _BytesIO()
-            with pd.ExcelWriter(buf2, engine="openpyxl") as w:
-                sl_df.to_excel(w, index=False, sheet_name="Shortlist")
-            st.download_button("Export Shortlist (Excel)", buf2.getvalue(),
-                               "shortlist.xlsx",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        except Exception:
-            st.caption("openpyxl not installed — Excel export unavailable")
+        # Export
+        buf2 = BytesIO()
+        with pd.ExcelWriter(buf2, engine="openpyxl") as w:
+            sl_disp.to_excel(w, index=False, sheet_name="Shortlist")
+        st.download_button(
+            "Export Shortlist (Excel)",
+            buf2.getvalue(),
+            "shortlist.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
