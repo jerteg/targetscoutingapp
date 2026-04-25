@@ -1,13 +1,13 @@
 """
-pages/1_Ranking.py — Versie 2
+pages/1_Ranking.py — Version 2
 
-Twee modi:
-  A. Find by role  → dimensie-gebaseerde rol-rankings via shared/roles_v2.py
+Two modes:
+  A. Find by role  → dimension-based role rankings via shared/roles_v2.py
   B. Similar to player → archetype-match + tier-adjusted cosine similarity
-                         (zoals in Dashboard, maar als zelfstandige zoek-pagina)
+                         (same as Dashboard, but as standalone search page)
 
-Nieuwe filters: leeftijd, voet, contract, minuten, league, market value.
-Behoud: shortlist, compare, export.
+New filters: age, foot, contract, minutes, league, market value.
+Retained: shortlist, compare, export.
 """
 import os, sys, datetime
 from io import BytesIO
@@ -151,8 +151,8 @@ with st.sidebar:
     if mode == "Find by role":
         st.markdown('<span class="sb-section-label">Position</span>', unsafe_allow_html=True)
         pos_options = list(ROLE_CONFIG_V2.keys())
-        # Filter Right/Left Winger eruit — gebruik alleen "Winger"
-        # (consistent met templates.position_groups die alleen "Winger" heeft)
+        # Filter Right/Left Winger out — only show "Winger"
+        # (consistent with templates.position_groups which only has "Winger")
         pos_options = [p for p in pos_options if p not in ("Right Winger", "Left Winger")]
         position_label = st.selectbox(
             "pos", pos_options,
@@ -243,8 +243,8 @@ if mode == "Find by role":
     st.title(f"{position_label} · {selected_role}")
     st.markdown(
         f'<div class="mode-info">Mode <b>Find by role</b> · '
-        f'Score gebaseerd op gewogen dimensies '
-        f'<span style="color:#c9a84c;">(VIF-vrij)</span> · '
+        f'Score based on weighted dimensions '
+        f'<span style="color:#c9a84c;">(VIF-free)</span> · '
         f'{league_template} leagues</div>',
         unsafe_allow_html=True,
     )
@@ -541,7 +541,7 @@ with tab_c:
         else:
             st.info("Select two different players to compare.")
     else:
-        st.info("Compare-tab is in role-mode beschikbaar (dimensie-vergelijking). Switch naar Find by role om te vergelijken.")
+        st.info("Compare-tab is available in role-mode (dimension comparison). Switch to Find by role to compare.")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
