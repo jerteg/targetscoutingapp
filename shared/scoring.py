@@ -1,14 +1,11 @@
 """
 shared/scoring.py — Single source of truth for player score computation.
 
-All pages import compute_scores() so ratings are identical everywhere.
-Logic mirrors the Player Card exactly:
-  1. Filter pool by position group + league template
-  2. Rank each stat percentile within the pool
-  3. Apply league multiplier (per mdict) and clip to [0, 100]
-  4. Compute weighted category scores (with negative stats flipped)
-  5. Compute overall = weighted sum of category scores
-  6. Apply adjustment: (overall/100)^0.45 * 100  (if mode='adjusted')
+Updated v2: ondersteunt naast het oude category-based score model
+ook het nieuwe dimensie-based role-scoring (zie shared/roles_v2.py).
+
+Backwards compatible: compute_scores() blijft hetzelfde signature.
+Nieuw: compute_role_ranking() voor de Ranking-pagina.
 """
 
 import pandas as pd
@@ -42,32 +39,18 @@ def compute_scores(
     score_mode: str = "Adjusted (recommended)",
 ) -> pd.DataFrame:
     """
-    Compute category scores + overall for all players in the pool.
-
-    Parameters
-    ----------
-    data            : full preprocessed dataframe
-    position_group  : one of position_groups.keys()
-    league_template : 'Top 5 leagues' | 'Next 14 competitions' | 'Both'
-    score_mode      : 'Adjusted (recommended)' | 'Model (raw)'
-
-    Returns
-    -------
-    DataFrame with added columns:
-        {cat}_score   for each category in report_template
-        overall_score (raw)
-        overall_adj   (adjusted, same as overall_score if mode='Model (raw)')
+    LEGACY: berekent category scores + overall via report_template.
+    Voor nieuwe rol-gebaseerde rankings: gebruik compute_role_ranking().
     """
     positions = position_groups.get(position_group, [])
 
-    # ── 1. Select pool + multiplier dict ──────────────────────────────────────
     if league_template == "Top 5 leagues":
         allowed = TOP5_LEAGUES
         mdict   = LEAGUE_MULTIPLIERS_ALL
     elif league_template == "Next 14 competitions":
         allowed = NEXT14_LEAGUES
         mdict   = LEAGUE_MULTIPLIERS_NEXT14
-    else:  # Both
+    else:
         allowed = TOP5_LEAGUES | NEXT14_LEAGUES
         mdict   = LEAGUE_MULTIPLIERS_ALL
 
@@ -82,16 +65,12 @@ def compute_scores(
     ALL_STATS = [s for g in report_template.values() for s in g["stats"]]
     ex_stats  = [s for s in ALL_STATS if s in pool.columns]
 
-    # ── 2. Percentile rank within pool ────────────────────────────────────────
-    # Fill NaN with 50th percentile so missing stats don't zero out category scores
     pct_raw = pool[ex_stats].rank(pct=True) * 100
     pct_raw = pct_raw.fillna(50)
 
-    # ── 3. Apply league multiplier and clip ───────────────────────────────────
     lg_mult = pool["League"].map(mdict).fillna(1.0)
     pct     = pct_raw.multiply(lg_mult.values, axis=0).clip(0, 100)
 
-    # ── 4. Category scores ────────────────────────────────────────────────────
     cw = position_category_weights.get(position_group, {})
 
     for cat, grp in report_template.items():
@@ -108,7 +87,6 @@ def compute_scores(
 
         pool[f"{cat}_score"] = pct[stats].apply(_sr, axis=1)
 
-    # ── 5. Overall raw ────────────────────────────────────────────────────────
     pool["overall_score"] = pool.apply(
         lambda r: _overall_raw(
             {c: r.get(f"{c}_score", 0) for c in report_template}, cw
@@ -116,36 +94,139 @@ def compute_scores(
         axis=1,
     )
 
-    # ── 6. Adjusted overall ───────────────────────────────────────────────────
     if score_mode == "Adjusted (recommended)":
         pool["overall_adj"] = (pool["overall_score"] / 100) ** 0.45 * 100
     else:
         pool["overall_adj"] = pool["overall_score"]
 
-    # ── 7. Bayesian shrinkage (reliability correction, k=1200) ───────────────
-    # Applied ONLY to players with fewer than 900 minutes (below the reliability
-    # threshold established in the literature — StatsBomb, Mackay 2017, Caley 2013).
-    # Players with 900+ minutes have a statistically sufficient sample; their score
-    # is left unchanged. Players below 900 min are pulled towards the pool mean.
-    # Formula: adjusted = w × score + (1 − w) × pool_mean
-    # where w = minutes / (minutes + k), k = 1200
-    # At 300 min: w = 0.20 | At 600 min: w = 0.33 | At 899 min: w = 0.43
-    _k                 = 1200
+    # Bayesian shrinkage (alleen <900 min)
+    _k                     = 1200
     _RELIABILITY_THRESHOLD = 900
     if "Minutes played" in pool.columns:
         _mins = pd.to_numeric(pool["Minutes played"], errors="coerce").fillna(0)
         _mean = pool["overall_adj"].mean()
         _w    = _mins / (_mins + _k)
-        # Only apply shrinkage to players below the reliability threshold
         _needs_shrinkage = _mins < _RELIABILITY_THRESHOLD
         pool.loc[_needs_shrinkage, "overall_adj"] = (
             _w[_needs_shrinkage] * pool.loc[_needs_shrinkage, "overall_adj"]
             + (1 - _w[_needs_shrinkage]) * _mean
         ).clip(0, 100)
 
-    # Also store the per-player percentile rows for bars rendering
-    pool["_pct_index"] = pool.index  # keep track for join
+    pool["_pct_index"] = pool.index
     pool["_league_template"] = league_template
     pool["_score_mode"]      = score_mode
 
     return pool
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# NEW: dimensie-gebaseerde rol-ranking
+# ──────────────────────────────────────────────────────────────────────────────
+
+def compute_role_ranking(
+    data: pd.DataFrame,
+    position_label: str,
+    role_name: str,
+    league_template: str = "Top 5 leagues",
+    apply_league_multiplier: bool = True,
+    apply_shrinkage: bool = True,
+) -> pd.DataFrame:
+    """
+    Bereken role-score via dimensie-systeem (roles_v2).
+
+    Parameters
+    ----------
+    data            : volledige preprocessed dataframe (uit load_season_data)
+    position_label  : key uit ROLE_CONFIG_V2 (bv. "Centre-Back", "Right Winger")
+    role_name       : rol-naam binnen die positie
+    league_template : 'Top 5 leagues' | 'Next 14 competitions' | 'Both'
+    apply_league_multiplier : zo ja: tier-correctie op eindscore
+    apply_shrinkage : zo ja: Bayesian shrinkage voor spelers <900 min
+
+    Returns
+    -------
+    DataFrame met:
+      - originele kolommen
+      - dim_<dimensienaam> kolommen voor elke dimensie
+      - role_score (0-100), de uiteindelijke gerangschikte score
+    Gesorteerd op role_score descending.
+    """
+    from shared.roles_v2 import (
+        compute_dimension_scores, compute_role_score,
+        ROLE_CONFIG_V2, POSITION_DIMENSIONS,
+    )
+
+    if position_label not in ROLE_CONFIG_V2:
+        raise KeyError(f"Position '{position_label}' niet in ROLE_CONFIG_V2")
+    if role_name not in ROLE_CONFIG_V2[position_label]:
+        raise KeyError(f"Role '{role_name}' niet in {position_label}")
+
+    # ── 1. Pool selecteren ──
+    # Map position_label naar Wyscout MainPos codes (uit templates.position_groups)
+    # Let op: position_groups in templates.py kent niet exact dezelfde keys als
+    # ROLE_CONFIG_V2 (bv. "Right Winger" vs "Winger"). Deze mapping is robuust:
+    POS_LABEL_TO_GROUP = {
+        "Centre-Back":           "Centre-Back",
+        "Right-Back":            "Right-Back",
+        "Left-Back":             "Left-Back",
+        "Defensive Midfielder":  "Defensive Midfielder",
+        "Central Midfielder":    "Central Midfielder",
+        "Attacking Midfielder":  "Attacking Midfielder",
+        "Right Winger":          "Right Winger",
+        "Left Winger":           "Left Winger",
+        "Winger":                "Winger",
+        "Striker":               "Striker",
+    }
+    positions = position_groups.get(POS_LABEL_TO_GROUP.get(position_label, position_label), [])
+    if not positions:
+        # fallback: probeer direct
+        positions = position_groups.get(position_label, [])
+
+    if league_template == "Top 5 leagues":
+        allowed = TOP5_LEAGUES
+        mdict   = LEAGUE_MULTIPLIERS_ALL
+    elif league_template == "Next 14 competitions":
+        allowed = NEXT14_LEAGUES
+        mdict   = LEAGUE_MULTIPLIERS_NEXT14
+    else:
+        allowed = TOP5_LEAGUES | NEXT14_LEAGUES
+        mdict   = LEAGUE_MULTIPLIERS_ALL
+
+    pool = data[
+        data["Main Position"].isin(positions) &
+        data["League"].isin(allowed)
+    ].copy()
+    pool = pool.replace([np.inf, -np.inf], np.nan)
+
+    if pool.empty:
+        return pool
+
+    # ── 2. Dimensie-scores berekenen ──
+    pool_with_dims = compute_dimension_scores(pool, position_label)
+
+    # ── 3. Rol-score berekenen ──
+    pool_with_dims["role_score"] = compute_role_score(
+        pool_with_dims, position_label, role_name
+    )
+
+    # ── 4. League multiplier (optioneel) ──
+    if apply_league_multiplier:
+        lg_mult = pool_with_dims["League"].map(mdict).fillna(1.0)
+        pool_with_dims["role_score"] = (
+            pool_with_dims["role_score"] * lg_mult
+        ).clip(0, 100)
+
+    # ── 5. Bayesian shrinkage (optioneel) ──
+    if apply_shrinkage and "Minutes played" in pool_with_dims.columns:
+        k       = 1200
+        thresh  = 900
+        mins    = pd.to_numeric(pool_with_dims["Minutes played"], errors="coerce").fillna(0)
+        mean    = pool_with_dims["role_score"].mean()
+        w       = mins / (mins + k)
+        needs   = mins < thresh
+        pool_with_dims.loc[needs, "role_score"] = (
+            w[needs] * pool_with_dims.loc[needs, "role_score"]
+            + (1 - w[needs]) * mean
+        ).clip(0, 100)
+
+    return pool_with_dims.sort_values("role_score", ascending=False).reset_index(drop=True)

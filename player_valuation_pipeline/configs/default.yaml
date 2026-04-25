@@ -1,0 +1,84 @@
+# Player Valuation Pipeline Configuration
+# Pas deze aan voor jouw setup
+
+# ─────────────────────────────────────────────────────────────────────────────
+# INPUT DATA PATHS
+# ─────────────────────────────────────────────────────────────────────────────
+data:
+  wyscout_current_season: "C:/Users/Jeroen Tegelaers/Documents/project/shared/data.csv"
+  wyscout_previous_season: "C:/Users/Jeroen Tegelaers/Documents/project/shared/data20242025.csv"
+  current_season_label: "2025/26"
+  previous_season_label: "2024/25"
+  tm_player_profiles: "C:/Users/Jeroen Tegelaers/Documents/project/player_valuation_pipeline/player_profiles.csv"
+  tm_transfer_history: "C:/Users/Jeroen Tegelaers/Documents/project/player_valuation_pipeline/transfer_history.csv"
+  tm_market_values: "C:/Users/Jeroen Tegelaers/Documents/project/player_valuation_pipeline/player_market_value.csv"
+
+output:
+  base_dir: "C:/Users/Jeroen Tegelaers/Documents/project/player_valuation_pipeline/output"
+  model_dir: "C:/Users/Jeroen Tegelaers/Documents/project/player_valuation_pipeline/models"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HYPERPARAMETERS
+# ─────────────────────────────────────────────────────────────────────────────
+rating:
+  # Minimum minuten voor een speler om in de rating mee te tellen
+  min_minutes: 900
+  
+  # Z-score clip range (voorkomt dat 1 outlier alles verneukt)
+  z_clip: 3.0
+  
+league_multipliers:
+  # Referentie liga (multiplier = 1.00)
+  reference_league: "Premier League"
+  
+  # Minimum minuten per seizoen voor migratie detection
+  min_minutes_per_season: 600
+  
+  # Bayesian shrinkage: tau (prior strength)
+  # Hogere tau = prior domineert meer
+  # tau=15 betekent: 15 migraties = evenveel waard als de prior
+  bayesian_tau: 15
+  
+  # Scaling constante voor beta → multiplier conversie
+  # multiplier = exp(-beta / k_scaling)
+  k_scaling: 1.5
+  
+  # Clipping range voor multipliers
+  multiplier_min: 0.20
+  multiplier_max: 1.20
+
+matching:
+  # Minimum match confidence om match te behouden
+  # ≥85 = high confidence only
+  # ≥70 = ook medium confidence
+  min_confidence: 85
+  
+  # Name similarity threshold (onder dit wordt als geen match beschouwd)
+  min_name_similarity: 60
+
+fee_multipliers:
+  # Alleen transfers vanaf dit jaar (inflation control)
+  min_year: 2015
+  
+  # Ridge regularization voor regressie
+  ridge_alpha: 0.5
+
+market_value:
+  # Train/test split
+  test_size: 0.20
+  random_state: 42
+  
+  # Ridge alpha voor hoofdmodel
+  ridge_alpha: 0.5
+  
+  # Minimum spelers per club voor club_tier berekening
+  min_players_per_club: 3
+  
+  # Leeftijd curve: polynoom graad (3 = cubic, kan asymmetrisch)
+  age_poly_degree: 3
+  
+  # Filter: minimum TM waarde om op te trainen (filter weg €0 / zeer lage waarde data errors)
+  min_tm_value: 100000
+  
+  # Alleen TM waardes vanaf deze datum gebruiken (recente markten)
+  min_tm_value_date: "2024-01-01"

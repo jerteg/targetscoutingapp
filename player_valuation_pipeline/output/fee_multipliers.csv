@@ -1,0 +1,21 @@
+League,From_Multiplier,To_Multiplier,Combined_Multiplier,N_From,N_To
+Premier League,1.0,1.0,1.0,54,130
+Italian Serie A,1.117,0.634,0.841,85,152
+La Liga,0.919,0.659,0.779,95,106
+Bundesliga,0.842,0.569,0.692,52,74
+Primeira Liga,0.848,0.44,0.611,80,57
+Ligue 1,0.7,0.485,0.583,82,70
+Championship,0.826,0.327,0.519,40,43
+Super Lig,0.778,0.255,0.446,21,37
+Eredivisie,0.584,0.334,0.442,76,47
+Serie A BRA,0.57,0.298,0.412,76,45
+Liga Profesional,0.548,0.218,0.345,52,22
+Pro League,0.625,0.184,0.339,66,49
+MLS,0.418,0.248,0.322,15,24
+Superligaen,0.512,0.154,0.281,37,23
+Liga Pro,0.22,0.299,0.257,4,1
+Prva HNL,0.431,0.124,0.231,24,10
+Segunda Division,0.424,0.1,0.206,52,42
+Ekstraklasa,0.349,0.052,0.134,14,15
+Swiss Super League,0.281,0.06,0.13,19,16
+Eliteserien,0.209,0.055,0.107,30,11
