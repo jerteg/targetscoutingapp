@@ -378,7 +378,7 @@ except Exception:
     primary_arch, secondary_arch = None, None
 
 # ── FIX 1: Category bars with score pill ─────────────────────────────────────
-cat_bars_html = '<div class="cat-bars">'
+cat_bars_html = '<div class="cat-bars" style="margin-top:10px;">'
 for cat in report_template:
     v = cat_scores.get(cat, 0)
     col = _c(v)
@@ -399,7 +399,7 @@ for cat in report_template:
     )
 cat_bars_html += '</div>'
 
-# ── Pills row (including archetype) ───────────────────────────────────────────
+# ── Pills row ────────────────────────────────────────────────────────────────
 pills_html = ""
 for lbl, val in [("Age", age), ("Min", mins), ("Foot", foot),
                  ("Height", f"{height} cm"), ("Nat.", nation)]:
@@ -407,14 +407,18 @@ for lbl, val in [("Age", age), ("Min", mins), ("Foot", foot),
                    f'<span class="pl">{lbl}</span>'
                    f'<span class="pv">{val}</span></div>')
 
+# ── Archetype pill — inline with player name ──────────────────────────────────
+arch_pill_html = ""
 if primary_arch and primary_arch != "—":
     ac = archetype_color(primary_arch)
     try:
         r, g, b = int(ac[1:3], 16), int(ac[3:5], 16), int(ac[5:7], 16)
-        pills_html += (f'<div class="arch-pill" '
-                       f'style="background:rgba({r},{g},{b},0.15);'
-                       f'color:{ac};border:0.5px solid rgba({r},{g},{b},0.4);">'
-                       f'◆ {primary_arch}</div>')
+        arch_pill_html = (
+            f'<div class="arch-pill" '
+            f'style="background:rgba({r},{g},{b},0.15);'
+            f'color:{ac};border:0.5px solid rgba({r},{g},{b},0.4);">'
+            f'◆ {primary_arch}</div>'
+        )
     except Exception:
         pass
 
@@ -424,8 +428,11 @@ st.markdown(f"""
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
     <div style="flex:1;">
       <div class="player-pos-line">{pos} · {active_team} · {league} · {st.session_state["_season"]}</div>
-      <div class="player-name-lg">{active_player}</div>
-      <div style="display:flex;flex-wrap:wrap;margin-top:6px;">{pills_html}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+        <div class="player-name-lg">{active_player}</div>
+        {arch_pill_html}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;margin-top:10px;">{pills_html}</div>
       {cat_bars_html}
     </div>
     <div style="text-align:center;flex-shrink:0;">
