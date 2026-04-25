@@ -226,7 +226,9 @@ POSITION_DIMENSIONS = {
     },
 
     # ════════════════════════════════════════════════════════════
-    "Right Winger": {  # ← identiek aan Left Winger
+    # Winger = primaire key (consistent met templates.position_groups)
+    # Right Winger / Left Winger = aliassen voor backwards compatibility
+    "Winger": {
         "Goal Output": [
             "xG per 90",
             "xG per shot",
@@ -263,8 +265,8 @@ POSITION_DIMENSIONS = {
             "PAdj Interceptions",
         ],
     },
-    "Left Winger": {},  # gevuld via copy hieronder
-    "Winger": {},  # alias voor Left/Right Winger
+    "Right Winger": {},  # alias voor Winger, gevuld via copy hieronder
+    "Left Winger": {},   # alias voor Winger, gevuld via copy hieronder
 
     # ════════════════════════════════════════════════════════════
     "Striker": {
@@ -310,10 +312,10 @@ POSITION_DIMENSIONS = {
     },
 }
 
-# Spiegel posities (LB = RB, LW = RW)
-POSITION_DIMENSIONS["Left-Back"]   = POSITION_DIMENSIONS["Right-Back"].copy()
-POSITION_DIMENSIONS["Left Winger"] = POSITION_DIMENSIONS["Right Winger"].copy()
-POSITION_DIMENSIONS["Winger"]      = POSITION_DIMENSIONS["Right Winger"].copy()
+# Spiegel posities (LB = RB, Right/Left Winger = Winger)
+POSITION_DIMENSIONS["Left-Back"]    = POSITION_DIMENSIONS["Right-Back"].copy()
+POSITION_DIMENSIONS["Right Winger"] = POSITION_DIMENSIONS["Winger"].copy()
+POSITION_DIMENSIONS["Left Winger"]  = POSITION_DIMENSIONS["Winger"].copy()
 
 
 # Negatieve stats — bij percentile-berekening 100−pct nemen
@@ -599,8 +601,8 @@ ROLE_CONFIG_V2 = {
         },
     },
 
-    # ──────── W ────────
-    "Right Winger": {
+    # ──────── W (Winger - primaire key) ────────
+    "Winger": {
         "Goalscoring Winger": {
             "description": "Snijdt naar binnen en scoort. Hoog xG volume en afwerking kritisch.",
             "weights": {
@@ -740,10 +742,10 @@ ROLE_CONFIG_V2 = {
     },
 }
 
-# Spiegel: LB krijgt zelfde rollen als RB, LW als RW
-ROLE_CONFIG_V2["Left-Back"]   = ROLE_CONFIG_V2["Right-Back"].copy()
-ROLE_CONFIG_V2["Left Winger"] = ROLE_CONFIG_V2["Right Winger"].copy()
-ROLE_CONFIG_V2["Winger"]      = ROLE_CONFIG_V2["Right Winger"].copy()
+# Spiegel: LB krijgt zelfde rollen als RB, Right/Left Winger als Winger
+ROLE_CONFIG_V2["Left-Back"]    = ROLE_CONFIG_V2["Right-Back"].copy()
+ROLE_CONFIG_V2["Right Winger"] = ROLE_CONFIG_V2["Winger"].copy()
+ROLE_CONFIG_V2["Left Winger"]  = ROLE_CONFIG_V2["Winger"].copy()
 
 
 # ──────────────────────────────────────────────────────────────────────────────

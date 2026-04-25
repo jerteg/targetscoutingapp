@@ -151,8 +151,9 @@ with st.sidebar:
     if mode == "Find by role":
         st.markdown('<span class="sb-section-label">Position</span>', unsafe_allow_html=True)
         pos_options = list(ROLE_CONFIG_V2.keys())
-        # Filter "Winger" alias eruit (alleen Right/Left tonen)
-        pos_options = [p for p in pos_options if p != "Winger"]
+        # Filter Right/Left Winger eruit — gebruik alleen "Winger"
+        # (consistent met templates.position_groups die alleen "Winger" heeft)
+        pos_options = [p for p in pos_options if p not in ("Right Winger", "Left Winger")]
         position_label = st.selectbox(
             "pos", pos_options,
             label_visibility="collapsed",
