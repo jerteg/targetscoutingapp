@@ -125,33 +125,23 @@ st.markdown("""
     display:flex; flex-direction:column; min-height:400px;
 }
 
-/* FIX 4 — Similar players ranking */
-.sim-row {
-    display:flex; align-items:center; gap:8px;
-    padding:5px 8px; border-bottom:0.5px solid #f0ebe2;
-    cursor:pointer;
+/* FIX 4 — Similar players minimal list */
+.sim-list-row {
+    display:flex; align-items:baseline; gap:8px;
+    padding:5px 0; border-bottom:0.5px solid #f0ebe2;
 }
-.sim-row:hover { background:#f7f4ee; }
-.sim-rank {
+.sim-list-row:last-child { border-bottom:none; }
+.sim-list-rank {
     font-family:'JetBrains Mono',monospace; font-size:9px;
-    font-weight:700; color:#c9a84c; width:14px; flex-shrink:0;
-    text-align:right;
+    font-weight:700; color:#c9a84c; width:16px; flex-shrink:0; text-align:right;
 }
-.sim-info { flex:1; min-width:0; }
-.sim-name { font-size:13px; font-weight:700; color:#111827;
-             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.sim-meta { font-family:'JetBrains Mono',monospace; font-size:9px;
-             color:#b0a898; margin-top:1px; }
-.sim-right { flex-shrink:0; text-align:right; }
-.sim-adj   { font-family:'JetBrains Mono',monospace; font-size:10px;
-              font-weight:700; color:#c9a84c; }
-.tier-badge {
-    font-family:'JetBrains Mono',monospace; font-size:7px; font-weight:700;
-    text-transform:uppercase; letter-spacing:0.06em;
-    padding:1px 4px; border-radius:3px; display:inline-block; margin-top:2px;
+.sim-list-name {
+    font-size:13px; font-weight:700; color:#111827; flex:1;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
-.sim-chevron {
-    font-size:11px; color:#c9b89a; flex-shrink:0; padding-left:4px;
+.sim-list-pct {
+    font-family:'JetBrains Mono',monospace; font-size:11px;
+    font-weight:700; color:#c9a84c; flex-shrink:0;
 }
 
 /* FIX 6 — smaller archetype badge */
@@ -458,7 +448,7 @@ st.markdown(f"""
 # ══════════════════════════════════════════════════════════════════════════════
 # ROW 1: Style bars LEFT | Radar RIGHT  — FIX 2: gelijke hoogte
 # ══════════════════════════════════════════════════════════════════════════════
-col_left, col_right = st.columns([1, 1.1])
+col_left, col_right = st.columns([1.3, 0.9])
 
 with col_left:
     pos_label_key = str(p_row2.get("Position Label", active_pg))
@@ -523,6 +513,7 @@ with col_right:
                                     percentile_basis=pct_basis,
                                     radar_type="Position Template",
                                     show_avg=True, compact=True)
+        fig_r.set_size_inches(5, 4)
         st.pyplot(fig_r, use_container_width=True)
     except Exception as e:
         st.error(f"Radar error: {e}")
@@ -562,33 +553,15 @@ with c_sim:
         for i, (_, sr) in enumerate(top10.iterrows()):
             sim_name  = sr["Player"]
             sim_team  = sr["Team within selected timeframe"]
-            sim_lg    = sr.get("League","")
-            sim_age   = sr.get("Age","—")
             adj_pct   = sr["adjusted_sim"] * 100
-            badge     = sr.get("tier_badge","Same tier")
-            badge_c   = tier_badge_color(badge)
-
-            # Compact league abbreviation
-            lg_short = sim_lg[:12] if len(str(sim_lg)) > 12 else sim_lg
 
             st.markdown(f"""
-            <div class="sim-row">
-              <span class="sim-rank">{i+1}</span>
-              <div class="sim-info">
-                <div class="sim-name">{sim_name}</div>
-                <div class="sim-meta">{sim_team[:18]} · {lg_short} · {sim_age} yrs</div>
-              </div>
-              <div class="sim-right">
-                <div class="sim-adj">{adj_pct:.0f}%</div>
-                <span class="tier-badge"
-                  style="background:{badge_c}22;color:{badge_c};border:0.5px solid {badge_c}44;">
-                  {badge}
-                </span>
-              </div>
-              <span class="sim-chevron">›</span>
+            <div class="sim-list-row">
+              <span class="sim-list-rank">{i+1}</span>
+              <span class="sim-list-name">{sim_name}</span>
+              <span class="sim-list-pct">{adj_pct:.0f}%</span>
             </div>""", unsafe_allow_html=True)
 
-            # Invisible button for navigation — rendered as minimal text
             if st.button("›", key=f"sim_{i}_{hash(sim_name+sim_team) % 99999}",
                          help=f"Open {sim_name}",
                          use_container_width=False):
