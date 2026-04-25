@@ -332,7 +332,7 @@ ROLE_CONFIG_V2 = {
     # ──────── CB ────────
     "Centre-Back": {
         "Stopper": {
-            "description": "Klassieke no-nonsense CB. Duelzuchtig en defensief dominant. Levert minimal offensieve input.",
+            "description": "Classic no-nonsense CB. Aggressive in duels and defensively dominant. Minimal offensive input.",
             "weights": {
                 "Defensive Duelling": 0.25,
                 "Aerial Dominance":   0.25,
@@ -343,7 +343,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Ball-Playing CB": {
-            "description": "Moderne opbouw-CB. Speelt vaak vanaf eigen helft door de linies.",
+            "description": "Modern build-up CB. Plays through the lines from own half.",
             "weights": {
                 "Defensive Duelling": 0.12,
                 "Aerial Dominance":   0.13,
@@ -355,7 +355,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Sweeper": {
-            "description": "Anticipatie en positiespel boven duels. Leest het spel vanaf hoge lijn.",
+            "description": "Anticipation and positional play over duels. Reads the game from a high line.",
             "weights": {
                 "Defensive Duelling": 0.15,
                 "Aerial Dominance":   0.15,
@@ -367,7 +367,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Aggressor": {
-            "description": "Stept uit, gaat mee in duels, dribbelt eruit. Vaak een outside-CB in een drieman.",
+            "description": "Steps out, engages in duels, dribbles out of pressure. Often an outside-CB in a back three.",
             "weights": {
                 "Defensive Duelling": 0.30,
                 "Aerial Dominance":   0.15,
@@ -382,7 +382,7 @@ ROLE_CONFIG_V2 = {
     # ──────── FB (RB en LB delen rollen) ────────
     "Right-Back": {
         "Defensive Full-Back": {
-            "description": "Stopt eerst, valt niet aan. Klassieke 1v1 verdediger op de flank.",
+            "description": "Stops first, rarely attacks. Classic 1v1 defender on the flank.",
             "weights": {
                 "Defensive Duelling": 0.25,
                 "Aerial Dominance":   0.20,
@@ -394,7 +394,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Attacking Full-Back": {
-            "description": "Loopt door naar de achterlijn. Levert crosses, combineert in laatste 1/3.",
+            "description": "Runs to the byline. Delivers crosses, combines in the final third.",
             "weights": {
                 "Defensive Duelling": 0.10,
                 "Aerial Dominance":   0.05,
@@ -409,7 +409,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Inverted Full-Back": {
-            "description": "Schuift naar binnen in opbouw, werkt als extra middenvelder. Stuurt het tempo.",
+            "description": "Tucks inside in build-up, acts as an extra midfielder. Controls tempo.",
             "weights": {
                 "Defensive Duelling": 0.10,
                 "Anticipation":       0.10,
@@ -421,7 +421,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Wing-Back (complete)": {
-            "description": "Alle facetten: verdedigt de flank én levert output. Vereist in 3-5-2 systemen.",
+            "description": "All-around: defends the flank and delivers output. Required in 3-5-2 systems.",
             "weights": {
                 "Defensive Duelling": 0.15,
                 "Aerial Dominance":   0.10,
@@ -439,7 +439,7 @@ ROLE_CONFIG_V2 = {
     # ──────── DM ────────
     "Defensive Midfielder": {
         "Ball-Winner": {
-            "description": "Breekt het spel. Hoog volume tackles, interceptions, fouls. Klassieke destroyer.",
+            "description": "Breaks up play. High volume of tackles, interceptions, fouls. Classic destroyer.",
             "weights": {
                 "Ground Defense Quality":  0.15,
                 "PAdj Defensive Volume":   0.40,
@@ -450,7 +450,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Deep-Lying Playmaker": {
-            "description": "Regisseur van voor de verdediging. Pass accuracy > duelkracht.",
+            "description": "Conductor in front of the defense. Pass accuracy over duel strength.",
             "weights": {
                 "Ground Defense Quality":  0.10,
                 "PAdj Defensive Volume":   0.10,
@@ -462,7 +462,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Anchor": {
-            "description": "Simpel, veilig, positioneel. Houdt positie, speelt korte passes, wint luchtduels.",
+            "description": "Simple, safe, positional. Holds position, plays short passes, wins aerials.",
             "weights": {
                 "Ground Defense Quality":  0.15,
                 "PAdj Defensive Volume":   0.20,
@@ -473,7 +473,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Box-to-Box DM": {
-            "description": "Diepste middenvelder die óók ruimte inloopt en soms in de zestien komt.",
+            "description": "Deepest midfielder who also runs into space and occasionally enters the box.",
             "weights": {
                 "Ground Defense Quality":  0.10,
                 "PAdj Defensive Volume":   0.20,
@@ -490,7 +490,7 @@ ROLE_CONFIG_V2 = {
     # ──────── CM ────────
     "Central Midfielder": {
         "Ball-Winning Midfielder": {
-            "description": "Wint ballen centraal, begint counters. Mix van destroyer en progressor.",
+            "description": "Wins balls centrally, starts counters. Mix of destroyer and progressor.",
             "weights": {
                 "Ground Defense Quality":  0.15,
                 "PAdj Defensive Volume":   0.20,
@@ -501,7 +501,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Deep-Lying Playmaker (8)": {
-            "description": "CM die diep zakt en passes verdeelt. Meer een '8 op de 6-lijn'.",
+            "description": "CM who drops deep and distributes. More of an '8 on the 6 line'.",
             "weights": {
                 "Ground Defense Quality":  0.10,
                 "Aerial Dominance":        0.10,
@@ -512,7 +512,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Box-to-Box Midfielder": {
-            "description": "All-rounder. Aanvallend én verdedigend betrokken, loopt ruimtes in.",
+            "description": "All-rounder. Involved offensively and defensively, runs into spaces.",
             "weights": {
                 "PAdj Defensive Volume":   0.15,
                 "Aerial Dominance":        0.10,
@@ -525,7 +525,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Advanced Playmaker": {
-            "description": "CM met hoge creatieve output. Komt dicht bij AM, creëert vanuit de 8-positie.",
+            "description": "CM with high creative output. Close to an AM, creates from the 8 position.",
             "weights": {
                 "Ground Defense Quality":  0.05,
                 "PAdj Defensive Volume":   0.10,
@@ -537,7 +537,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Goalscoring Midfielder": {
-            "description": "8 die in de box komt (Lampard/De Bruyne-achtig). Hoge xG voor een CM.",
+            "description": "An 8 who arrives in the box (Lampard/De Bruyne-like). High xG for a CM.",
             "weights": {
                 "PAdj Defensive Volume":   0.10,
                 "Aerial Dominance":        0.05,
@@ -553,7 +553,7 @@ ROLE_CONFIG_V2 = {
     # ──────── AM ────────
     "Attacking Midfielder": {
         "Classic 10": {
-            "description": "Creëert vanuit de zone achter de spits. Hoge assist-output.",
+            "description": "Creates from the zone behind the striker. High assist output.",
             "weights": {
                 "Box Threat":              0.10,
                 "Finishing":               0.05,
@@ -565,7 +565,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Shadow Striker": {
-            "description": "AM die uit zijn positie zakt richting de box. Scoort zelf veel.",
+            "description": "AM who drifts from position into the box. Scores frequently himself.",
             "weights": {
                 "Box Threat":              0.30,
                 "Finishing":               0.20,
@@ -577,7 +577,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Dribbling 10": {
-            "description": "Creëert door eigen actie. Dribbels en runs voor de creatie van kansen.",
+            "description": "Creates through individual action. Dribbles and runs to manufacture chances.",
             "weights": {
                 "Box Threat":              0.15,
                 "Finishing":               0.05,
@@ -589,7 +589,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Pressing 10": {
-            "description": "Modern werkpaardje. Creëert, maar levert ook defensief werk.",
+            "description": "Modern workhorse. Creates, but also contributes defensively.",
             "weights": {
                 "Box Threat":              0.10,
                 "Finishing":               0.05,
@@ -604,7 +604,7 @@ ROLE_CONFIG_V2 = {
     # ──────── W (Winger - primaire key) ────────
     "Winger": {
         "Goalscoring Winger": {
-            "description": "Snijdt naar binnen en scoort. Hoog xG volume en afwerking kritisch.",
+            "description": "Cuts inside and scores. High xG volume and finishing critical.",
             "weights": {
                 "Goal Output":         0.30,
                 "Finishing":           0.20,
@@ -617,7 +617,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Creative Winger": {
-            "description": "Inverted playmaker. Levert de assist, kijkt meer dan hij schiet.",
+            "description": "Inverted playmaker. Delivers the assist, looks for the pass more than the shot.",
             "weights": {
                 "Goal Output":         0.10,
                 "Finishing":           0.05,
@@ -631,7 +631,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Direct Winger": {
-            "description": "Klassieke buitenkant-speler. Gaat door tot de achterlijn en levert crosses.",
+            "description": "Classic touchline winger. Runs to the byline and delivers crosses.",
             "weights": {
                 "Goal Output":         0.05,
                 "Finishing":           0.05,
@@ -644,7 +644,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Complete Forward": {
-            "description": "Top-tier elite winger: scoort, creëert én draagt. Yamal/Saka/Olise-achtig.",
+            "description": "Top-tier elite winger: scores, creates and carries. Yamal/Saka/Olise-like.",
             "weights": {
                 "Goal Output":         0.20,
                 "Finishing":           0.15,
@@ -657,7 +657,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Pressing Winger": {
-            "description": "Houdt de flank dicht én valt aan. Essentieel in intense pressing systemen.",
+            "description": "Locks down the flank and attacks. Essential in intense pressing systems.",
             "weights": {
                 "Goal Output":         0.15,
                 "Finishing":           0.10,
@@ -674,7 +674,7 @@ ROLE_CONFIG_V2 = {
     # ──────── ST ────────
     "Striker": {
         "Poacher": {
-            "description": "Leeft in de zestien. Scoort vanuit goede posities, low-volume maar high-quality.",
+            "description": "Lives in the box. Scores from good positions, low-volume but high-quality.",
             "weights": {
                 "Shooting Volume":     0.25,
                 "Shot Quality":        0.20,
@@ -686,7 +686,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Target Man": {
-            "description": "Kopspelend referentiepunt. Houdt ballen vast, wint luchtduels, scoort met hoofd.",
+            "description": "Aerial reference point. Holds the ball up, wins headers, scores with the head.",
             "weights": {
                 "Shooting Volume":     0.10,
                 "Shot Quality":        0.10,
@@ -699,7 +699,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Deep-Lying Forward": {
-            "description": "Zakt diep. Combineert, creëert, scoort. Kane/Firmino/Benzema-type.",
+            "description": "Drops deep. Combines, creates, scores. Kane/Firmino/Benzema type.",
             "weights": {
                 "Shooting Volume":     0.10,
                 "Shot Quality":        0.10,
@@ -713,7 +713,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Pressing Forward": {
-            "description": "Eerste verdediger van het team. Hoog duelwerk, gaat mee in pressing.",
+            "description": "First defender of the team. High duel volume, joins the press.",
             "weights": {
                 "Shooting Volume":     0.15,
                 "Shot Quality":        0.10,
@@ -726,7 +726,7 @@ ROLE_CONFIG_V2 = {
             },
         },
         "Complete Forward": {
-            "description": "Alle facetten. Moderne topspits (Haaland, Lewandowski-type).",
+            "description": "All-around. Modern elite striker (Haaland, Lewandowski type).",
             "weights": {
                 "Shooting Volume":     0.20,
                 "Shot Quality":        0.20,
