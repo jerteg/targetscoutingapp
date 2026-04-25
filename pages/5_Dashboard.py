@@ -513,7 +513,11 @@ with col_right:
                                     percentile_basis=pct_basis,
                                     radar_type="Position Template",
                                     show_avg=True, compact=True)
-        st.pyplot(fig_r, use_container_width=True)
+        buf = io.BytesIO()
+        fig_r.savefig(buf, format="png", dpi=110, bbox_inches="tight",
+                      facecolor="#faf7f2")
+        buf.seek(0)
+        st.image(buf, width=340)
     except Exception as e:
         st.error(f"Radar error: {e}")
 
@@ -549,26 +553,22 @@ with c_sim:
             sim_stats=sim_stats, target_league=pl_league, min_minutes=600)
 
         top10 = sim_results.head(10)
+        sim_table_html = '<table style="width:100%;border-collapse:collapse;">'
         for i, (_, sr) in enumerate(top10.iterrows()):
-            sim_name  = sr["Player"]
-            sim_team  = sr["Team within selected timeframe"]
-            adj_pct   = sr["adjusted_sim"] * 100
-
-            st.markdown(f"""
-            <div class="sim-list-row">
-              <span class="sim-list-rank">{i+1}</span>
-              <span class="sim-list-name">{sim_name}</span>
-              <span class="sim-list-pct">{adj_pct:.0f}%</span>
-            </div>""", unsafe_allow_html=True)
-
-            if st.button("›", key=f"sim_{i}_{hash(sim_name+sim_team) % 99999}",
-                         help=f"Open {sim_name}",
-                         use_container_width=False):
-                st.session_state.dashboard_player = sim_name
-                st.session_state.dashboard_team   = sim_team
-                st.session_state.dashboard_position_group = active_pg
-                st.session_state.dashboard_position_filter = sel_position_filter
-                st.rerun()
+            sim_name = sr["Player"]
+            adj_pct  = sr["adjusted_sim"] * 100
+            bg = "rgba(0,0,0,0)" if i % 2 == 0 else "#f7f4ee"
+            sim_table_html += (
+                f'<tr style="background:{bg};">'
+                f'<td style="font-family:\'JetBrains Mono\',monospace;font-size:9px;'
+                f'font-weight:700;color:#c9a84c;padding:5px 6px 5px 0;width:18px;">{i+1}</td>'
+                f'<td style="font-size:12px;font-weight:700;color:#111827;padding:5px 4px;">{sim_name}</td>'
+                f'<td style="font-family:\'JetBrains Mono\',monospace;font-size:11px;'
+                f'font-weight:700;color:#c9a84c;text-align:right;padding:5px 0 5px 4px;">{adj_pct:.0f}%</td>'
+                f'</tr>'
+            )
+        sim_table_html += '</table>'
+        st.markdown(sim_table_html, unsafe_allow_html=True)
 
     except Exception as e:
         st.error(f"Similar players error: {e}")
@@ -651,24 +651,62 @@ st.markdown('<hr style="border:none;border-top:0.5px solid #e0d8cc;margin:12px 0
             unsafe_allow_html=True)
 
 def build_dashboard_html():
-    """Build a self-contained static HTML snapshot of the dashboard."""
-    cats_html = ""
+    """Static HTML snapshot that matches the page layout exactly."""
+
+    # ── Banner pills ──
+    pills_out = ""
+    for lbl, val in [("Age", age), ("Min", mins), ("Foot", foot),
+                     ("Height", f"{height} cm"), ("Nat.", nation)]:
+        pills_out += (
+            f'<div style="display:inline-flex;flex-direction:column;'
+            f'background:rgba(255,255,255,0.07);border:0.5px solid rgba(255,255,255,0.12);'
+            f'border-radius:4px;padding:2px 8px;margin:2px 2px 0 0;">'
+            f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:7px;'
+            f'color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.06em;">{lbl}</span>'
+            f'<span style="font-size:10px;font-weight:600;color:rgba(255,255,255,0.9);">{val}</span>'
+            f'</div>'
+        )
+
+    # ── Category bars in banner ──
+    cat_out = ""
     for cat in report_template:
         v = cat_scores.get(cat, 0)
-        col = _c(v)
-        lbl = CAT_SHORT.get(cat, cat)
+        col = _c(v); lbl = CAT_SHORT.get(cat, cat)
         pill_bg, pill_txt = _pill_color(v)
-        cats_html += (
-            f'<div style="background:#f0ebe2;border-left:3px solid {col};'
-            f'border-radius:0 4px 4px 0;padding:5px 10px;margin-bottom:4px;">'
-            f'<span style="font-size:11px;font-weight:700;color:#111;">{lbl}</span>'
-            f'<span style="float:right;background:{pill_bg};color:{pill_txt};'
-            f'padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">{v:.0f}</span></div>'
+        cat_out += (
+            f'<div>'
+            f'<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">'
+            f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;'
+            f'color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.06em;">{lbl}</span>'
+            f'<span style="border-radius:4px;padding:2px 7px;font-family:\'JetBrains Mono\',monospace;'
+            f'font-size:11px;font-weight:600;background:{pill_bg};color:{pill_txt};">{v:.0f}</span>'
+            f'</div>'
+            f'<div style="background:rgba(255,255,255,0.1);height:3px;border-radius:2px;">'
+            f'<div style="width:{v:.0f}%;height:3px;border-radius:2px;background:{col};"></div>'
+            f'</div></div>'
         )
-    bars_section = ""
+
+    # ── Archetype pill ──
+    arch_out = ""
+    if primary_arch and primary_arch != "—":
+        try:
+            ac = archetype_color(primary_arch)
+            r2, g2, b2 = int(ac[1:3],16), int(ac[3:5],16), int(ac[5:7],16)
+            arch_out = (
+                f'<div style="display:inline-flex;align-items:center;gap:5px;border-radius:4px;'
+                f'padding:2px 8px;font-family:\'JetBrains Mono\',monospace;font-size:9px;font-weight:700;'
+                f'text-transform:uppercase;letter-spacing:0.07em;'
+                f'background:rgba({r2},{g2},{b2},0.15);color:{ac};'
+                f'border:0.5px solid rgba({r2},{g2},{b2},0.4);">◆ {primary_arch}</div>'
+            )
+        except Exception:
+            pass
+
+    # ── Style profile bars (two columns) ──
+    bars_left = ""; bars_right = ""
     if avail_bars and not pos_pool.empty:
-        bars_section = '<div style="margin-bottom:16px;">'
-        for stat in avail_bars:
+        half = math.ceil(len(avail_bars) / 2)
+        for i, stat in enumerate(avail_bars):
             raw_val = p_row2.get(stat, None)
             try:
                 raw_f   = float(str(raw_val).replace(",",".")) if raw_val is not None else None
@@ -680,73 +718,84 @@ def build_dashboard_html():
             col_fill = _pct_bar_color(pct_val)
             short    = STAT_SHORT.get(stat, stat[:28])
             raw_str  = f"{raw_f:.2f}" if raw_f is not None else "—"
-            bars_section += (
+            bar_html = (
                 f'<div style="margin-bottom:6px;">'
-                f'<div style="font-size:10px;color:#111;display:flex;'
-                f'justify-content:space-between;margin-bottom:2px;">'
-                f'<span>{short}</span>'
-                f'<span style="font-family:JetBrains Mono,monospace;color:#7a7060;">{raw_str}</span>'
+                f'<div style="font-size:10px;display:flex;justify-content:space-between;margin-bottom:2px;">'
+                f'<span style="color:#111827;">{short}</span>'
+                f'<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#7a7060;">{raw_str}</span>'
                 f'</div>'
                 f'<div style="background:#f0ebe2;height:5px;border-radius:3px;">'
-                f'<div style="width:{pct_val:.0f}%;height:5px;border-radius:3px;'
-                f'background:{col_fill};"></div></div></div>'
+                f'<div style="width:{pct_val:.0f}%;height:5px;border-radius:3px;background:{col_fill};"></div>'
+                f'</div></div>'
             )
-        bars_section += '</div>'
+            if i < half: bars_left += bar_html
+            else: bars_right += bar_html
 
     return f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 *{{box-sizing:border-box;margin:0;padding:0;}}
-body{{font-family:'DM Sans',Arial,sans-serif;background:#faf7f2;color:#111827;
-      -webkit-font-smoothing:antialiased;padding:24px;max-width:1000px;margin:0 auto;}}
-.header{{background:#111827;border-radius:8px;padding:14px 18px;margin-bottom:14px;
-          display:flex;justify-content:space-between;align-items:center;}}
-.p-name{{font-size:20px;font-weight:700;color:white;letter-spacing:-0.01em;}}
-.p-sub{{font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,0.4);
-         text-transform:uppercase;letter-spacing:0.1em;margin-top:3px;}}
-.score-box{{min-width:50px;height:50px;border-radius:8px;display:flex;align-items:center;
-             justify-content:center;font-family:'JetBrains Mono',monospace;
-             font-size:20px;font-weight:700;color:white;padding:0 10px;}}
-.two-col{{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}}
-.section-title{{font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;
-                 text-transform:uppercase;letter-spacing:0.12em;color:#b0a898;
-                 border-bottom:0.5px solid #e0d8cc;padding-bottom:4px;margin-bottom:8px;}}
-.footer{{margin-top:18px;padding-top:10px;border-top:0.5px solid #e0d8cc;
-          font-family:'JetBrains Mono',monospace;font-size:9px;color:#b0a898;
-          display:flex;justify-content:space-between;}}
-@media print{{body{{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
-@page{{margin:1.5cm;}}}}
+body{{font-family:'DM Sans',sans-serif;background:#faf7f2;color:#111827;
+      -webkit-font-smoothing:antialiased;padding:16px;max-width:1200px;margin:0 auto;}}
+.section-lbl{{font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;
+              color:#b0a898;text-transform:uppercase;letter-spacing:0.12em;
+              margin-bottom:8px;display:flex;align-items:center;gap:8px;}}
+.section-lbl::after{{content:'';flex:1;height:0.5px;background:#e0d8cc;}}
+@media print{{body{{-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:0;}}
+@page{{margin:1cm;size:A4 landscape;}}}}
 </style>
 </head><body>
-<div class="header">
-  <div>
-    <div class="p-name">{active_player}</div>
-    <div class="p-sub">{pos} · {active_team} · {league} · {age} yrs · {mins} min</div>
-    {f'<div style="margin-top:5px;font-family:JetBrains Mono,monospace;font-size:9px;color:rgba(201,168,76,0.8);">◆ {primary_arch}</div>' if primary_arch else ''}
-  </div>
-  <div class="score-box" style="background:{ov_color};">{ov_display:.0f}</div>
-</div>
 
-<div class="two-col">
-  <div>
-    <div class="section-title">Category scores</div>
-    {cats_html}
-  </div>
-  <div>
-    <div class="section-title">Rank</div>
-    <div style="background:#f0ebe2;border-radius:6px;padding:12px;">
-      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:#b0a898;">Overall score</div>
-      <div style="font-size:24px;font-weight:700;color:{ov_color};">{ov_display:.0f}</div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#b0a898;margin-top:6px;">{rank_str}</div>
+<!-- Banner -->
+<div style="background:#111827;border-radius:10px;padding:10px 18px 0;margin-bottom:12px;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+    <div style="flex:1;">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(255,255,255,0.4);
+                  text-transform:uppercase;letter-spacing:0.1em;">{pos} · {active_team} · {league} · {st.session_state["_season"]}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+        <div style="font-size:22px;font-weight:700;color:white;letter-spacing:-0.02em;">{active_player}</div>
+        {arch_out}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;margin-top:10px;">{pills_out}</div>
+      <div style="margin-top:10px;display:grid;grid-template-columns:repeat(5,1fr);gap:5px;">{cat_out}</div>
+    </div>
+    <div style="text-align:center;flex-shrink:0;">
+      <div style="width:50px;height:50px;border-radius:8px;display:flex;align-items:center;
+                  justify-content:center;font-size:22px;font-weight:700;color:white;
+                  font-family:'JetBrains Mono',monospace;background:{ov_color};">{ov_display:.0f}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:rgba(255,255,255,0.3);
+                  text-transform:uppercase;margin-top:3px;">Overall</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:rgba(201,168,76,0.5);margin-top:1px;">
+        {league_template_score.split()[0]} · {score_mode.split()[0]}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:7px;color:rgba(255,255,255,0.2);margin-top:1px;">{rank_str}</div>
     </div>
   </div>
+  <div style="background:rgba(255,255,255,0.04);border-top:0.5px solid rgba(255,255,255,0.07);
+              margin:8px -18px 0;padding:4px 18px;border-radius:0 0 10px 10px;
+              display:flex;gap:14px;align-items:center;">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:rgba(255,255,255,0.22);">
+      <span style="color:rgba(201,168,76,0.55);font-weight:700;margin-right:3px;">Score:</span>{league_template_score} · {score_mode.split()[0]}</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:rgba(255,255,255,0.22);">|</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:rgba(255,255,255,0.22);">
+      <span style="color:rgba(133,183,235,0.55);font-weight:700;margin-right:3px;">Radar:</span>{pct_basis}</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:rgba(255,255,255,0.22);">|</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:rgba(255,255,255,0.22);">{active_pg} · Wyscout 26 Mar 2026</span>
+  </div>
 </div>
 
-<div class="section-title">Style profile — {pos_label_key}</div>
-{bars_section}
+<hr style="border:none;border-top:0.5px solid #e0d8cc;margin:6px 0 12px;">
 
-<div class="footer">
+<!-- Style profile bars -->
+<div class="section-lbl">Style profile — {pos_label_key}</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;margin-bottom:16px;">
+  <div>{bars_left}</div>
+  <div>{bars_right}</div>
+</div>
+
+<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#b0a898;
+            margin-top:16px;padding-top:10px;border-top:0.5px solid #e0d8cc;
+            display:flex;justify-content:space-between;">
   <span>Target Scouting · Player Dashboard · {active_player} · {active_team}</span>
   <span>Wyscout 26 Mar 2026 · {league_template_score} · {active_pg}</span>
 </div>
