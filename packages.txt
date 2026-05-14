@@ -1,0 +1,2 @@
+fonts-inter
+fonts-jetbrains-mono
